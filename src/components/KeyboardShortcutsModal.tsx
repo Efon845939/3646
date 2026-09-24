@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { X, Keyboard, Search, Scale, Swords, SunMoon, Download, Filter, ArrowUpDown, LayoutGrid } from 'lucide-react';
+import { X, Keyboard, Search, Scale, Swords, SunMoon, Download, ArrowUpDown, LayoutGrid, ListOrdered } from 'lucide-react';
+import { QUICK_FILTERS } from '../utils/quickFilters';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface KeyboardShortcutsModalProps {
@@ -21,19 +22,20 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
   useEffect(() => {
     if (!isOpen) return;
 
+    // Escape is owned by useGlobalShortcuts; this listener only highlights the pressed key.
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
       setActiveKey(e.key.toLowerCase());
-      const timer = setTimeout(() => setActiveKey(null), 600);
-      return () => clearTimeout(timer);
+      clearTimeout(timer);
+      timer = setTimeout(() => setActiveKey(null), 600);
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      clearTimeout(timer);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -43,12 +45,12 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
       keyChar: '/',
       description: 'Focus Team Search input (auto-selects text)',
       category: 'workflow',
-      icon: <Search className="w-4 h-4 text-integra-yellow" />,
+      icon: <Search className="w-4 h-4 text-accent" />,
     },
     {
       keyDisplay: 'Esc',
       keyChar: 'escape',
-      description: 'Close active modal, compare mode, simulator, or blur search',
+      description: 'Close the top layer: modal, then compare / simulator / picklist, then search',
       category: 'workflow',
       icon: <X className="w-4 h-4 text-rose-400" />,
     },
@@ -74,53 +76,42 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
       icon: <Swords className="w-4 h-4 text-amber-400" />,
     },
     {
+      keyDisplay: 'P',
+      keyChar: 'p',
+      description: 'Toggle Alliance Picklist (drag & drop pick order)',
+      category: 'workflow',
+      icon: <ListOrdered className="w-4 h-4 text-accent" />,
+    },
+    {
       keyDisplay: '1',
       keyChar: '1',
       description: 'Sort by Score: High to Low',
       category: 'filters',
-      icon: <ArrowUpDown className="w-4 h-4 text-zinc-400" />,
+      icon: <ArrowUpDown className="w-4 h-4 text-text-muted" />,
     },
     {
       keyDisplay: '2',
       keyChar: '2',
       description: 'Sort by Score: Low to High',
       category: 'filters',
-      icon: <ArrowUpDown className="w-4 h-4 text-zinc-400" />,
+      icon: <ArrowUpDown className="w-4 h-4 text-text-muted" />,
     },
-    {
-      keyDisplay: '3',
-      keyChar: '3',
-      description: 'Toggle filter: Impact Winners',
-      category: 'filters',
-      icon: <Filter className="w-4 h-4 text-integra-yellow" />,
-    },
-    {
-      keyDisplay: '4',
-      keyChar: '4',
-      description: 'Toggle filter: High Threat',
-      category: 'filters',
-      icon: <Filter className="w-4 h-4 text-rose-400" />,
-    },
-    {
-      keyDisplay: '5',
-      keyChar: '5',
-      description: 'Toggle filter: Most Creative',
-      category: 'filters',
-      icon: <Filter className="w-4 h-4 text-emerald-400" />,
-    },
-    {
-      keyDisplay: '6',
-      keyChar: '6',
-      description: 'Toggle filter: Best Branding',
-      category: 'filters',
-      icon: <Filter className="w-4 h-4 text-sky-400" />,
-    },
+    ...QUICK_FILTERS.map((filter): ShortcutItem => {
+      const Icon = filter.icon;
+      return {
+        keyDisplay: filter.shortcut,
+        keyChar: filter.shortcut,
+        description: `Toggle filter: ${filter.label}`,
+        category: 'filters',
+        icon: <Icon className={`w-4 h-4 ${filter.iconClass}`} />,
+      };
+    }),
     {
       keyDisplay: '0',
       keyChar: '0',
       description: 'Reset all filters & clear search input',
       category: 'filters',
-      icon: <X className="w-4 h-4 text-zinc-400" />,
+      icon: <X className="w-4 h-4 text-text-muted" />,
     },
     {
       keyDisplay: 'T',
@@ -132,7 +123,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
     {
       keyDisplay: 'E',
       keyChar: 'e',
-      description: 'Export all filtered scouting data to CSV spreadsheet',
+      description: 'Export the filtered team list (with EPA & scout notes) to CSV',
       category: 'system',
       icon: <Download className="w-4 h-4 text-emerald-400" />,
     },
@@ -141,7 +132,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
       keyChar: '?',
       description: 'Open / Close this keyboard shortcuts guide',
       category: 'system',
-      icon: <Keyboard className="w-4 h-4 text-integra-yellow" />,
+      icon: <Keyboard className="w-4 h-4 text-accent" />,
     },
   ];
 
@@ -162,7 +153,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           {/* Header */}
           <div className="flex items-center justify-between p-5 border-b border-border-main bg-bg-dark/80">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-integra-yellow/20 text-integra-yellow border border-integra-yellow/40">
+              <div className="p-2 rounded-xl bg-integra-yellow/20 text-accent border border-integra-yellow/40">
                 <Keyboard className="w-5 h-5" />
               </div>
               <div>
@@ -188,7 +179,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           <div className="p-5 max-h-[70vh] overflow-y-auto space-y-6">
             {/* Workflow Category */}
             <div>
-              <span className="text-[11px] font-black uppercase tracking-wider text-integra-yellow block mb-2.5 font-montserrat">
+              <span className="text-[11px] font-black uppercase tracking-wider text-accent block mb-2.5 font-montserrat">
                 Navigation & Views
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -209,7 +200,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
                           {item.description}
                         </span>
                       </div>
-                      <kbd className="shrink-0 px-2 py-1 text-xs font-mono font-bold rounded-md bg-surface border border-border-main text-integra-yellow shadow-xs">
+                      <kbd className="shrink-0 px-2 py-1 text-xs font-mono font-bold rounded-md bg-surface border border-border-main text-accent shadow-xs">
                         {item.keyDisplay}
                       </kbd>
                     </div>
@@ -241,7 +232,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
                           {item.description}
                         </span>
                       </div>
-                      <kbd className="shrink-0 px-2 py-1 text-xs font-mono font-bold rounded-md bg-surface border border-border-main text-zinc-200 shadow-xs">
+                      <kbd className="shrink-0 px-2 py-1 text-xs font-mono font-bold rounded-md bg-surface border border-border-main text-text-main shadow-xs">
                         {item.keyDisplay}
                       </kbd>
                     </div>
@@ -273,7 +264,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
                           {item.description}
                         </span>
                       </div>
-                      <kbd className="shrink-0 px-2 py-1 text-xs font-mono font-bold rounded-md bg-surface border border-border-main text-zinc-200 shadow-xs">
+                      <kbd className="shrink-0 px-2 py-1 text-xs font-mono font-bold rounded-md bg-surface border border-border-main text-text-main shadow-xs">
                         {item.keyDisplay}
                       </kbd>
                     </div>
@@ -286,7 +277,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           {/* Footer */}
           <div className="p-3.5 bg-bg-dark border-t border-border-main flex items-center justify-between text-[11px] text-text-muted">
             <span>Shortcuts are disabled while typing in notes or input fields</span>
-            <span className="font-mono text-integra-yellow font-semibold">Press Esc to close</span>
+            <span className="font-mono text-accent font-semibold">Press Esc to close</span>
           </div>
         </motion.div>
       </div>

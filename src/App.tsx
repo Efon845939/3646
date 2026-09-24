@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import {
   Search,
   Hexagon,
@@ -9,12 +9,10 @@ import {
   Keyboard,
   LayoutGrid,
   Table as TableIcon,
-  Filter,
-  ArrowUpDown,
-  Trophy,
-  ShieldAlert,
-  Palette,
-  Award,
+  ListOrdered,
+  Scale,
+  Loader2,
+  type LucideIcon,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { mockTeams, Team } from './data';
@@ -22,110 +20,115 @@ import { TeamCard } from './components/TeamCard';
 import { TeamTableView } from './components/TeamTableView';
 import { TeamModal } from './components/TeamModal';
 import { TeamCompare } from './components/TeamCompare';
-import { MatchSimulator } from './components/MatchSimulator';
+import { PicklistBoard } from './components/PicklistBoard';
 import { QuickCompareBar } from './components/QuickCompareBar';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useGlobalShortcuts, AppView } from './hooks/useGlobalShortcuts';
+import { usePicklist } from './hooks/usePicklist';
+import { QUICK_FILTERS, QuickFilterId, HOST_TEAM_NUMBER, getQuickFilter } from './utils/quickFilters';
+import { buildTeamsCsv, datedFilename, downloadCsv } from './utils/csvExport';
+import { readStorage, writeStorage } from './utils/storage';
+
+// The simulator (arena, physics loop, audio engine) is the heaviest screen and most visits
+// never open it, so it is split into its own chunk and fetched on first use.
+const MatchSimulator = lazy(() =>
+  import('./components/MatchSimulator').then((m) => ({ default: m.MatchSimulator }))
+);
 
 type SortOption = 'score-desc' | 'score-asc' | 'rank-asc' | 'rank-desc';
-type FilterTag = 'All' | 'Impact Winner' | 'Most Creative' | 'High Threat' | 'Best Branding';
 type ViewMode = 'grid' | 'table';
+
+const hostTeam = mockTeams.find((t) => t.number === HOST_TEAM_NUMBER) || mockTeams[0];
 
 export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('score-desc');
-  const [filterTag, setFilterTag] = useState<FilterTag>('All');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [activeFilter, setActiveFilter] = useState<QuickFilterId | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    readStorage('integra_view_mode') === 'table' ? 'table' : 'grid'
+  );
+  const [activeView, setActiveView] = useState<AppView>('dashboard');
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [isCompareMode, setIsCompareMode] = useState(false);
-  const [isSimulatorMode, setIsSimulatorMode] = useState(false);
   const [simInitialTeamA, setSimInitialTeamA] = useState<Team | null>(null);
   const [simInitialTeamB, setSimInitialTeamB] = useState<Team | null>(null);
   const [compareTeams, setCompareTeams] = useState<Team[]>([]);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isDark, setIsDark] = useState(() => readStorage('theme') !== 'light');
 
+  const picklist = usePicklist();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleToggleCompare = (team: Team) => {
-    setCompareTeams((prev) => {
-      const exists = prev.some((t) => t.number === team.number);
-      if (exists) {
-        return prev.filter((t) => t.number !== team.number);
-      } else {
-        if (prev.length >= 4) {
-          return [...prev.slice(1), team];
-        }
-        return [...prev, team];
-      }
-    });
-  };
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+    writeStorage('theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
 
-  const handleClearCompare = () => {
-    setCompareTeams([]);
-  };
+  useEffect(() => {
+    writeStorage('integra_view_mode', viewMode);
+  }, [viewMode]);
 
-  const handleOpenCompare = () => {
-    setIsCompareMode(true);
-    setIsSimulatorMode(false);
+  const toggleTheme = () => setIsDark((prev) => !prev);
+
+  const toggleView = (view: Exclude<AppView, 'dashboard'>) => {
+    setActiveView((prev) => (prev === view ? 'dashboard' : view));
     setSelectedTeam(null);
   };
 
+  const handleToggleCompare = (team: Team) => {
+    setCompareTeams((prev) => {
+      if (prev.some((t) => t.number === team.number)) {
+        return prev.filter((t) => t.number !== team.number);
+      }
+      return prev.length >= 4 ? [...prev.slice(1), team] : [...prev, team];
+    });
+  };
+
   const handleOpenSimulator = (teamA?: Team | null, teamB?: Team | null) => {
-    const integra = mockTeams.find((t) => t.number === 3646) || mockTeams[0];
     if (teamA && teamB) {
       setSimInitialTeamA(teamA);
       setSimInitialTeamB(teamB);
     } else if (teamA) {
-      if (teamA.number === integra.number) {
-        const topRival = mockTeams.find((t) => t.number === 1678) || mockTeams[1];
-        setSimInitialTeamA(integra);
-        setSimInitialTeamB(topRival);
-      } else {
-        setSimInitialTeamA(integra);
-        setSimInitialTeamB(teamA);
-      }
+      const topRival = mockTeams.find((t) => t.number === 1678) || mockTeams[1];
+      setSimInitialTeamA(hostTeam);
+      setSimInitialTeamB(teamA.number === hostTeam.number ? topRival : teamA);
     }
-    setIsSimulatorMode(true);
-    setIsCompareMode(false);
+    setActiveView('simulator');
     setSelectedTeam(null);
   };
 
-  const [isDark, setIsDark] = useState(() => {
-    return localStorage.theme === 'light' ? false : true;
-  });
+  const resetFilters = () => {
+    setActiveFilter(null);
+    setSearchQuery('');
+    setSortBy('score-desc');
+  };
 
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      localStorage.theme = 'dark';
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.theme = 'light';
-    }
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark(!isDark);
+  const toggleQuickFilter = (id: QuickFilterId) => {
+    setActiveFilter((prev) => (prev === id ? null : id));
+  };
 
   const filteredAndSortedTeams = useMemo(() => {
     let result = [...mockTeams];
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
       result = result.filter(
-        (t) => t.name.toLowerCase().includes(q) || t.number.toString().includes(q)
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.number.toString().includes(q) ||
+          (t.location || '').toLowerCase().includes(q)
       );
     }
 
-    if (filterTag !== 'All') {
-      result = result.filter((t) => t.tags.includes(filterTag));
+    if (activeFilter) {
+      result = result.filter(getQuickFilter(activeFilter).matches);
     }
 
     result.sort((a, b) => {
       switch (sortBy) {
         case 'score-desc':
-          return b.score - a.score;
+          return b.score - a.score || a.rank - b.rank;
         case 'score-asc':
-          return a.score - b.score;
+          return a.score - b.score || b.rank - a.rank;
         case 'rank-asc':
           return a.rank - b.rank;
         case 'rank-desc':
@@ -136,83 +139,52 @@ export default function App() {
     });
 
     return result;
-  }, [searchQuery, sortBy, filterTag]);
+  }, [searchQuery, sortBy, activeFilter]);
 
+  // Exports exactly what is on screen: the current search, quick filter and sort order.
   const exportToCSV = () => {
-    const headers = [
-      'Number',
-      'Name',
-      'Score',
-      'Rank',
-      'Tier',
-      'Pros',
-      'Cons',
-      'Critique',
-      'Prediction',
-      'Counter Play',
-    ];
-    const rows = mockTeams.map((t) => [
-      t.number,
-      `"${t.name}"`,
-      t.score,
-      t.rank,
-      t.tier,
-      `"${t.pros.join(', ')}"`,
-      `"${t.cons.join(', ')}"`,
-      `"${t.critique}"`,
-      `"${t.prediction}"`,
-      `"${t.counterPlay}"`,
-    ]);
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'teams_scouting.csv';
-    link.click();
+    downloadCsv(datedFilename('integra-scouting'), buildTeamsCsv(filteredAndSortedTeams));
   };
 
-  const totalTeams = mockTeams.length;
   const highestScore = Math.max(...mockTeams.map((t) => t.score));
   const averageScore = (mockTeams.reduce((acc, t) => acc + t.score, 0) / mockTeams.length).toFixed(1);
+  const averageEPA = (
+    mockTeams.reduce((acc, t) => acc + (t.frcStats?.epa.total ?? 0), 0) / mockTeams.length
+  ).toFixed(1);
+  const hostStats = hostTeam.frcStats!;
+  const picklistCount = picklist.lists.first.length + picklist.lists.second.length;
 
-  // Global Keyboard Shortcuts
   useGlobalShortcuts({
     searchInputRef,
     isShortcutsOpen,
     setIsShortcutsOpen,
-    selectedTeamNumber: selectedTeam ? selectedTeam.number : null,
+    isTeamModalOpen: selectedTeam !== null,
     onCloseTeamModal: () => setSelectedTeam(null),
-    isCompareMode,
-    setIsCompareMode,
-    isSimulatorMode,
-    setIsSimulatorMode,
+    activeView,
+    onToggleView: toggleView,
+    onCloseView: () => setActiveView('dashboard'),
     searchQuery,
     setSearchQuery,
     toggleTheme,
     exportToCSV,
     onToggleViewMode: () => setViewMode((prev) => (prev === 'grid' ? 'table' : 'grid')),
-    onSelectSort: (sort) => setSortBy(sort),
-    onToggleFilterTag: (tag) => setFilterTag((prev) => (prev === tag ? 'All' : tag)),
-    onResetFilters: () => {
-      setFilterTag('All');
-      setSearchQuery('');
-      setSortBy('score-desc');
-    },
+    onSelectSort: setSortBy,
+    onToggleQuickFilter: toggleQuickFilter,
+    onResetFilters: resetFilters,
   });
 
   return (
     <div className="min-h-screen bg-bg-dark text-text-main font-inter pb-20 transition-colors duration-300">
       {/* Navigation Header */}
-      <nav className="flex flex-col lg:flex-row justify-between items-center py-3.5 border-b border-border-main mb-6 px-6 bg-bg-dark/95 backdrop-blur-md sticky top-0 z-40 transition-colors duration-300 shadow-sm">
-        <div
+      <nav className="flex flex-col lg:flex-row justify-between items-center py-3.5 border-b border-border-main mb-6 px-4 sm:px-6 bg-bg-dark/95 backdrop-blur-md sticky top-0 z-40 transition-colors duration-300 shadow-sm">
+        <button
+          type="button"
           onClick={() => {
-            setIsCompareMode(false);
-            setIsSimulatorMode(false);
-            setSearchQuery('');
-            setFilterTag('All');
-            setSortBy('score-desc');
+            setActiveView('dashboard');
+            resetFilters();
           }}
-          className="flex items-center space-x-4 w-full lg:w-auto cursor-pointer group"
+          className="flex items-center space-x-4 w-full lg:w-auto cursor-pointer group text-left"
+          title="Back to dashboard & reset filters"
         >
           <div className="bg-integra-yellow text-[#111111] border-2 border-[#111111] px-2.5 py-0.5 text-2xl font-montserrat font-black uppercase rounded-xs group-hover:scale-105 transition-transform duration-200">
             #3646
@@ -225,81 +197,65 @@ export default function App() {
               INTEGRA SCOUTING
             </span>
           </div>
-        </div>
+        </button>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-3 lg:mt-0 w-full lg:w-auto justify-end">
           {/* View Mode Toggle Button */}
           <div className="inline-flex rounded-lg bg-surface p-0.5 border border-border-main text-xs font-bold uppercase">
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-integra-yellow text-[#111111] font-black'
-                  : 'text-text-muted hover:text-text-main'
-              }`}
-              title="Card Grid View (Shortcut: V)"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Grid</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                viewMode === 'table'
-                  ? 'bg-integra-yellow text-[#111111] font-black'
-                  : 'text-text-muted hover:text-text-main'
-              }`}
-              title="Table Analytics View (Shortcut: V)"
-            >
-              <TableIcon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Table</span>
-            </button>
+            {(
+              [
+                { mode: 'grid', label: 'Grid', icon: LayoutGrid, title: 'Card Grid View (Shortcut: V)' },
+                { mode: 'table', label: 'Table', icon: TableIcon, title: 'Table Analytics View (Shortcut: V)' },
+              ] as const
+            ).map(({ mode, label, icon: Icon, title }) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => {
+                  setViewMode(mode);
+                  setActiveView('dashboard');
+                }}
+                aria-pressed={viewMode === mode}
+                className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                  viewMode === mode && activeView === 'dashboard'
+                    ? 'bg-integra-yellow text-[#111111] font-black'
+                    : 'text-text-muted hover:text-text-main'
+                }`}
+                title={title}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            ))}
           </div>
 
-          {/* Match Simulator Launcher */}
-          <button
+          <NavViewButton
             id="nav-btn-simulator"
-            onClick={() => {
-              setIsSimulatorMode(!isSimulatorMode);
-              setIsCompareMode(false);
-            }}
-            aria-keyshortcuts="M"
-            className={`px-3 py-1.5 rounded-lg border transition-all flex items-center justify-center font-bold text-xs gap-1.5 uppercase ${
-              isSimulatorMode
-                ? 'bg-integra-yellow text-[#111111] border-integra-yellow shadow-xs'
-                : 'bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main border-border-main'
-            }`}
+            active={activeView === 'simulator'}
+            onClick={() => toggleView('simulator')}
+            icon={Swords}
+            label="Simulator"
+            shortcut="M"
             title="FRC Match Simulator (Shortcut: M)"
-          >
-            <Swords className="w-3.5 h-3.5 text-integra-yellow" />
-            <span>Simulator</span>
-            <kbd className="hidden sm:inline-block px-1 py-0.2 text-[9px] font-mono rounded bg-bg-dark border border-border-main text-text-muted">
-              M
-            </kbd>
-          </button>
-
-          {/* Compare Launcher */}
-          <button
+          />
+          <NavViewButton
             id="nav-btn-compare"
-            onClick={() => {
-              setIsCompareMode(!isCompareMode);
-              setIsSimulatorMode(false);
-            }}
-            aria-keyshortcuts="C"
-            className={`px-3 py-1.5 rounded-lg border transition-colors flex items-center justify-center font-bold text-xs gap-1.5 uppercase ${
-              isCompareMode
-                ? 'bg-integra-yellow text-[#111111] border-integra-yellow'
-                : 'bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main border-border-main'
-            }`}
+            active={activeView === 'compare'}
+            onClick={() => toggleView('compare')}
+            icon={Scale}
+            label={`Compare${compareTeams.length > 0 ? ` (${compareTeams.length})` : ''}`}
+            shortcut="C"
             title="Compare Mode (Shortcut: C)"
-          >
-            <span>Compare {compareTeams.length > 0 && `(${compareTeams.length})`}</span>
-            <kbd className="hidden sm:inline-block px-1 py-0.2 text-[9px] font-mono rounded bg-bg-dark border border-border-main text-text-muted">
-              C
-            </kbd>
-          </button>
+          />
+          <NavViewButton
+            id="nav-btn-picklist"
+            active={activeView === 'picklist'}
+            onClick={() => toggleView('picklist')}
+            icon={ListOrdered}
+            label={`Picklist${picklistCount > 0 ? ` (${picklistCount})` : ''}`}
+            shortcut="P"
+            title="Alliance Selection Picklist (Shortcut: P)"
+          />
 
           {/* Export CSV */}
           <button
@@ -307,9 +263,9 @@ export default function App() {
             onClick={exportToCSV}
             aria-keyshortcuts="E"
             className="p-2 rounded-lg border border-border-main bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main transition-colors flex items-center justify-center gap-1"
-            title="Export CSV (Shortcut: E)"
+            title={`Export ${filteredAndSortedTeams.length} filtered teams to CSV (Shortcut: E)`}
           >
-            <Download className="w-4 h-4 text-text-muted hover:text-text-main" />
+            <Download className="w-4 h-4" />
             <kbd className="hidden xl:inline-block text-[9px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
               E
             </kbd>
@@ -323,7 +279,7 @@ export default function App() {
             className="p-2 rounded-lg border border-border-main bg-surface hover:bg-surface-hover text-text-muted transition-colors flex items-center justify-center gap-1"
             title={`Toggle Theme (Shortcut: T) - Currently ${isDark ? 'Dark' : 'Light'}`}
           >
-            {isDark ? <Sun className="w-4 h-4 text-integra-yellow" /> : <Moon className="w-4 h-4 text-gray-700" />}
+            {isDark ? <Sun className="w-4 h-4 text-accent" /> : <Moon className="w-4 h-4 text-text-main" />}
             <kbd className="hidden xl:inline-block text-[9px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
               T
             </kbd>
@@ -337,26 +293,26 @@ export default function App() {
             className="p-2 rounded-lg border border-border-main bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main transition-colors flex items-center justify-center gap-1"
             title="Keyboard Shortcuts (Shortcut: ?)"
           >
-            <Keyboard className="w-4 h-4 text-integra-yellow" />
+            <Keyboard className="w-4 h-4 text-accent" />
             <kbd className="hidden sm:inline-block text-[9px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted font-bold">
               ?
             </kbd>
           </button>
 
           {/* Team Search Input */}
-          <div className="bg-surface p-2 rounded-lg border border-border-main flex items-center space-x-2 w-full lg:w-60 relative transition-colors duration-200">
+          <div className="bg-surface p-2 rounded-lg border border-border-main flex items-center space-x-2 w-full lg:w-60 relative transition-colors duration-200 focus-within:border-accent">
             <Search className="w-4 h-4 text-text-muted absolute left-3 pointer-events-none" />
             <input
               id="main-search-input"
               ref={searchInputRef}
               type="text"
               aria-keyshortcuts="/"
-              placeholder="Search team # or name..."
+              aria-label="Search teams"
+              placeholder="Search team #, name, city..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-                if (isSimulatorMode) setIsSimulatorMode(false);
-                if (isCompareMode) setIsCompareMode(false);
+                if (activeView !== 'dashboard') setActiveView('dashboard');
               }}
               className="bg-transparent outline-none text-xs w-full pl-6 pr-10 placeholder-text-muted text-text-main"
             />
@@ -388,21 +344,35 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-[1240px] mx-auto px-4 sm:px-6 py-2">
-        {isSimulatorMode ? (
-          <MatchSimulator
-            onClose={() => setIsSimulatorMode(false)}
-            initialTeamA={simInitialTeamA}
-            initialTeamB={simInitialTeamB}
-          />
-        ) : isCompareMode ? (
+        {activeView === 'simulator' ? (
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center gap-2 py-24 text-xs text-text-muted font-mono uppercase tracking-wider bg-surface border border-border-main rounded-xl">
+                <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                Loading match simulator…
+              </div>
+            }
+          >
+            <MatchSimulator
+              onClose={() => setActiveView('dashboard')}
+              initialTeamA={simInitialTeamA}
+              initialTeamB={simInitialTeamB}
+            />
+          </Suspense>
+        ) : activeView === 'compare' ? (
           <TeamCompare
             teams={compareTeams}
-            onAddTeam={(t) => setCompareTeams([...compareTeams, t])}
-            onRemoveTeam={(t) => setCompareTeams(compareTeams.filter((ct) => ct.number !== t.number))}
-            onClose={() => setIsCompareMode(false)}
-            onOpenSimulator={(teamA, teamB) => {
-              handleOpenSimulator(teamA, teamB);
-            }}
+            onAddTeam={(t) => setCompareTeams((prev) => [...prev, t])}
+            onRemoveTeam={(t) => setCompareTeams((prev) => prev.filter((ct) => ct.number !== t.number))}
+            onClose={() => setActiveView('dashboard')}
+            onOpenSimulator={(teamA, teamB) => handleOpenSimulator(teamA, teamB)}
+          />
+        ) : activeView === 'picklist' ? (
+          <PicklistBoard
+            picklist={picklist}
+            onClose={() => setActiveView('dashboard')}
+            onSelectTeam={setSelectedTeam}
+            onOpenSimulator={handleOpenSimulator}
           />
         ) : (
           <>
@@ -410,20 +380,29 @@ export default function App() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
               <div className="bg-surface p-4 rounded-xl border border-border-main relative overflow-hidden transition-colors duration-200">
                 <div className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Total Teams Scouted</div>
-                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-text-main">{totalTeams}</div>
+                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-text-main">{mockTeams.length}</div>
+                <div className="text-[10px] text-text-muted font-mono mt-0.5">Field avg EPA {averageEPA}</div>
                 <div className="absolute -right-2 -bottom-2 opacity-5 text-4xl">
                   <Hexagon size={64} />
                 </div>
               </div>
 
-              <div className="bg-surface p-4 rounded-xl border border-border-main border-l-4 border-l-integra-yellow transition-colors duration-200">
+              <button
+                type="button"
+                onClick={() => setSelectedTeam(hostTeam)}
+                className="text-left bg-surface hover:bg-surface-hover p-4 rounded-xl border border-border-main border-l-4 border-l-integra-yellow transition-colors duration-200"
+                title="Open #3646 scouting profile"
+              >
                 <div className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Host Team</div>
                 <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-text-main">#3646 IntegrA</div>
-              </div>
+                <div className="text-[10px] text-text-muted font-mono mt-0.5">
+                  Rank #{hostTeam.rank} · EPA {hostStats.epa.total} · Top {(100 - hostStats.epa.percentile).toFixed(1)}%
+                </div>
+              </button>
 
               <div className="bg-surface p-4 rounded-xl border border-border-main transition-colors duration-200">
                 <div className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Peak Pre-PR Score</div>
-                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-integra-yellow">{highestScore}</div>
+                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-accent">{highestScore}</div>
               </div>
 
               <div className="bg-surface p-4 rounded-xl border border-border-main transition-colors duration-200">
@@ -435,131 +414,51 @@ export default function App() {
             {/* Quick Sort & Filter Chips */}
             <div className="flex flex-wrap items-center justify-between gap-2 py-1 mb-5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <button
+                <FilterChip
                   id="filter-btn-score-high"
+                  active={sortBy === 'score-desc'}
                   onClick={() => setSortBy('score-desc')}
-                  aria-keyshortcuts="1"
+                  shortcut="1"
                   title="Sort: Highest Score (Shortcut: 1)"
-                  className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
-                    sortBy === 'score-desc'
-                      ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
-                      : 'border-border-main text-text-muted hover:text-text-main bg-surface'
-                  }`}
                 >
-                  <span>Score: High</span>
-                  <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-                    sortBy === 'score-desc' ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
-                  }`}>
-                    1
-                  </kbd>
-                </button>
-
-                <button
+                  Score: High
+                </FilterChip>
+                <FilterChip
                   id="filter-btn-score-low"
+                  active={sortBy === 'score-asc'}
                   onClick={() => setSortBy('score-asc')}
-                  aria-keyshortcuts="2"
+                  shortcut="2"
                   title="Sort: Lowest Score (Shortcut: 2)"
-                  className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
-                    sortBy === 'score-asc'
-                      ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
-                      : 'border-border-main text-text-muted hover:text-text-main bg-surface'
-                  }`}
                 >
-                  <span>Score: Low</span>
-                  <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-                    sortBy === 'score-asc' ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
-                  }`}>
-                    2
-                  </kbd>
-                </button>
+                  Score: Low
+                </FilterChip>
 
-                <button
-                  id="filter-btn-impact-winners"
-                  onClick={() => setFilterTag(filterTag === 'Impact Winner' ? 'All' : 'Impact Winner')}
-                  aria-keyshortcuts="3"
-                  title="Filter: Impact Winners (Shortcut: 3)"
-                  className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
-                    filterTag === 'Impact Winner'
-                      ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
-                      : 'border-border-main text-text-muted hover:text-text-main bg-surface'
-                  }`}
-                >
-                  <Trophy className="w-3 h-3 text-integra-yellow" />
-                  <span>Impact Winners</span>
-                  <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-                    filterTag === 'Impact Winner' ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
-                  }`}>
-                    3
-                  </kbd>
-                </button>
+                {QUICK_FILTERS.map((filter) => {
+                  const Icon = filter.icon;
+                  const count = mockTeams.filter(filter.matches).length;
+                  const isActive = activeFilter === filter.id;
+                  return (
+                    <FilterChip
+                      key={filter.id}
+                      id={`filter-btn-${filter.id}`}
+                      active={isActive}
+                      onClick={() => toggleQuickFilter(filter.id)}
+                      shortcut={filter.shortcut}
+                      title={`${filter.description} (Shortcut: ${filter.shortcut})`}
+                    >
+                      <Icon className={`w-3 h-3 ${isActive ? 'text-[#111111]' : filter.iconClass}`} />
+                      <span>{filter.label}</span>
+                      <span className={`font-mono text-[10px] ${isActive ? 'text-[#111111]/70' : 'text-text-muted'}`}>
+                        {count}
+                      </span>
+                    </FilterChip>
+                  );
+                })}
 
-                <button
-                  id="filter-btn-high-threat"
-                  onClick={() => setFilterTag(filterTag === 'High Threat' ? 'All' : 'High Threat')}
-                  aria-keyshortcuts="4"
-                  title="Filter: High Threat Teams (Shortcut: 4)"
-                  className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
-                    filterTag === 'High Threat'
-                      ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
-                      : 'border-border-main text-text-muted hover:text-text-main bg-surface'
-                  }`}
-                >
-                  <ShieldAlert className="w-3 h-3 text-rose-400" />
-                  <span>High Threat</span>
-                  <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-                    filterTag === 'High Threat' ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
-                  }`}>
-                    4
-                  </kbd>
-                </button>
-
-                <button
-                  id="filter-btn-most-creative"
-                  onClick={() => setFilterTag(filterTag === 'Most Creative' ? 'All' : 'Most Creative')}
-                  aria-keyshortcuts="5"
-                  title="Filter: Most Creative Teams (Shortcut: 5)"
-                  className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
-                    filterTag === 'Most Creative'
-                      ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
-                      : 'border-border-main text-text-muted hover:text-text-main bg-surface'
-                  }`}
-                >
-                  <Award className="w-3 h-3 text-emerald-400" />
-                  <span>Most Creative</span>
-                  <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-                    filterTag === 'Most Creative' ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
-                  }`}>
-                    5
-                  </kbd>
-                </button>
-
-                <button
-                  id="filter-btn-best-branding"
-                  onClick={() => setFilterTag(filterTag === 'Best Branding' ? 'All' : 'Best Branding')}
-                  aria-keyshortcuts="6"
-                  title="Filter: Best Branding Teams (Shortcut: 6)"
-                  className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
-                    filterTag === 'Best Branding'
-                      ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
-                      : 'border-border-main text-text-muted hover:text-text-main bg-surface'
-                  }`}
-                >
-                  <Palette className="w-3 h-3 text-sky-400" />
-                  <span>Best Branding</span>
-                  <kbd className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-                    filterTag === 'Best Branding' ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
-                  }`}>
-                    6
-                  </kbd>
-                </button>
-
-                {(filterTag !== 'All' || searchQuery) && (
+                {(activeFilter || searchQuery) && (
                   <button
                     id="filter-btn-clear"
-                    onClick={() => {
-                      setFilterTag('All');
-                      setSearchQuery('');
-                    }}
+                    onClick={resetFilters}
                     aria-keyshortcuts="0"
                     title="Reset All Filters (Shortcut: 0)"
                     className="text-xs text-text-muted hover:text-text-main underline ml-2 flex items-center gap-1"
@@ -597,6 +496,7 @@ export default function App() {
                         isSelectedForCompare={compareTeams.some((t) => t.number === team.number)}
                         onToggleCompare={handleToggleCompare}
                         compareIndex={compareTeams.findIndex((t) => t.number === team.number)}
+                        picklistLane={picklist.laneByTeam.get(team.number) ?? null}
                       />
                     </motion.div>
                   ))}
@@ -606,8 +506,9 @@ export default function App() {
                   teams={filteredAndSortedTeams}
                   selectedCompareTeams={compareTeams}
                   onToggleCompare={handleToggleCompare}
-                  onSelectTeam={(t) => setSelectedTeam(t)}
+                  onSelectTeam={setSelectedTeam}
                   onOpenSimulator={(t) => handleOpenSimulator(t)}
+                  laneByTeam={picklist.laneByTeam}
                 />
               )
             ) : (
@@ -615,6 +516,13 @@ export default function App() {
                 <Hexagon className="w-12 h-12 text-border-main mx-auto mb-4" />
                 <h3 className="text-lg font-montserrat font-bold text-text-muted">No teams found</h3>
                 <p className="text-xs text-text-muted mt-1">Try adjusting your filters or search query.</p>
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="mt-4 px-3 py-1.5 rounded-lg border border-border-main bg-bg-dark text-xs font-bold uppercase text-text-muted hover:text-text-main"
+                >
+                  Reset filters (0)
+                </button>
               </div>
             )}
           </>
@@ -629,19 +537,22 @@ export default function App() {
           isSelectedForCompare={compareTeams.some((t) => t.number === selectedTeam.number)}
           onToggleCompare={handleToggleCompare}
           onOpenSimulator={handleOpenSimulator}
+          picklistLane={picklist.laneByTeam.get(selectedTeam.number) ?? null}
+          onSetPicklistLane={(team, lane) => picklist.moveTeam(team.number, lane)}
         />
       )}
 
       {/* Floating Quick Compare Bar appears when at least 2 teams are selected */}
-      {!isCompareMode && (
+      {activeView === 'dashboard' && (
         <QuickCompareBar
           selectedTeams={compareTeams}
           onRemoveTeam={handleToggleCompare}
-          onClearAll={handleClearCompare}
-          onOpenCompare={handleOpenCompare}
-          onOpenSimulator={(teamA, teamB) => {
-            handleOpenSimulator(teamA, teamB);
+          onClearAll={() => setCompareTeams([])}
+          onOpenCompare={() => {
+            setActiveView('compare');
+            setSelectedTeam(null);
           }}
+          onOpenSimulator={(teamA, teamB) => handleOpenSimulator(teamA, teamB)}
         />
       )}
 
@@ -653,18 +564,101 @@ export default function App() {
         className="fixed bottom-6 left-6 z-40 hidden sm:flex items-center gap-2 px-3 py-2 rounded-full bg-surface/90 hover:bg-surface backdrop-blur-md border border-border-main hover:border-integra-yellow/60 text-text-muted hover:text-text-main shadow-lg transition-all text-xs group"
         title="Keyboard Shortcuts Guide (Shortcut: ?)"
       >
-        <Keyboard className="w-4 h-4 text-integra-yellow group-hover:scale-110 transition-transform" />
+        <Keyboard className="w-4 h-4 text-accent group-hover:scale-110 transition-transform" />
         <span className="font-medium">Shortcuts</span>
-        <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-bg-dark border border-border-main text-text-muted group-hover:text-integra-yellow">
+        <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-bg-dark border border-border-main text-text-muted group-hover:text-accent">
           ?
         </kbd>
       </button>
 
       {/* Global Keyboard Shortcuts Help Modal */}
-      <KeyboardShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
+      <KeyboardShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
     </div>
+  );
+}
+
+function NavViewButton({
+  id,
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  shortcut,
+  title,
+}: {
+  id: string;
+  active: boolean;
+  onClick: () => void;
+  icon: LucideIcon;
+  label: string;
+  shortcut: string;
+  title: string;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-keyshortcuts={shortcut}
+      className={`px-3 py-1.5 rounded-lg border transition-colors flex items-center justify-center font-bold text-xs gap-1.5 uppercase ${
+        active
+          ? 'bg-integra-yellow text-[#111111] border-integra-yellow'
+          : 'bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main border-border-main'
+      }`}
+      title={title}
+    >
+      {/* Icon switches to black on the active yellow background, otherwise it disappears. */}
+      <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#111111]' : 'text-accent'}`} />
+      <span>{label}</span>
+      <kbd
+        className={`hidden sm:inline-block px-1 py-0.2 text-[9px] font-mono rounded border ${
+          active ? 'bg-black/15 border-black/20 text-[#111111]' : 'bg-bg-dark border-border-main text-text-muted'
+        }`}
+      >
+        {shortcut}
+      </kbd>
+    </button>
+  );
+}
+
+function FilterChip({
+  id,
+  active,
+  onClick,
+  shortcut,
+  title,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  onClick: () => void;
+  shortcut: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-keyshortcuts={shortcut}
+      title={title}
+      className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
+        active
+          ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
+          : 'border-border-main text-text-muted hover:text-text-main bg-surface'
+      }`}
+    >
+      {children}
+      <kbd
+        className={`text-[9px] font-mono px-1 py-0.2 rounded ${
+          active ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
+        }`}
+      >
+        {shortcut}
+      </kbd>
+    </button>
   );
 }

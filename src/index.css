@@ -7,6 +7,8 @@
   --text-main: #111111;
   --text-muted: #6b7280;
   --border-main: #e5e7eb;
+  /* Brand yellow text on white is ~1.3:1; this darker gold keeps the hue at ~5:1 contrast. */
+  --accent-text: #806500;
 }
 
 .dark {
@@ -16,6 +18,7 @@
   --text-main: #ffffff;
   --text-muted: #9ca3af;
   --border-main: #374151;
+  --accent-text: #FEDE00;
 }
 
 body {
@@ -25,6 +28,7 @@ body {
 
 @theme {
   --color-integra-yellow: #FEDE00;
+  --color-accent: var(--accent-text);
   --color-bg-dark: var(--bg-main);
   --color-surface: var(--bg-surface);
   --color-surface-hover: var(--bg-surface-hover);

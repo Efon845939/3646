@@ -242,6 +242,16 @@ const CURATED_STATS: Record<number, Partial<FRCPerformanceStats>> = {
   },
 };
 
+// 32-bit integer mixer (murmur3 finalizer). Neighbouring team numbers land far apart,
+// so the modulo buckets used below behave like independent dice rolls.
+function hashTeamNumber(teamNumber: number): number {
+  let h = Math.imul(teamNumber ^ 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
 // Procedural deterministic generator for any team based on their score & rank
 export function getEnhancedTeamStats(team: Team): FRCPerformanceStats {
   const curated = CURATED_STATS[team.number];
@@ -264,7 +274,9 @@ export function getEnhancedTeamStats(team: Team): FRCPerformanceStats {
 function generateProceduralStats(team: Team): FRCPerformanceStats {
   const s = team.score; // 60 to 97
   const rank = team.rank || 1;
-  const seed = (team.number * 17 + rank * 31) % 100;
+  // Seeded only by the primary key: a team's synthetic profile must not change when its rank
+  // shifts. 2520 = lcm of every modulus used below, so each seed yields a distinct combination.
+  const seed = hashTeamNumber(team.number) % 2520;
 
   // Normalized score factor 0 to 1
   const norm = Math.max(0, Math.min(1, (s - 65) / 32));
@@ -278,7 +290,7 @@ function generateProceduralStats(team: Team): FRCPerformanceStats {
 
   // TBA OPR & DPR
   const opr = Math.round((totalEPA * 1.1 + ((seed % 9) - 4) * 0.5) * 10) / 10;
-  const dpr = Math.round((22 - norm * 9 + ((seed * 7) % 7) * 0.4) * 10) / 10;
+  const dpr = Math.round((22 - norm * 9 + ((seed >> 3) % 7) * 0.4) * 10) / 10;
   const ccwm = Math.round((opr - dpr) * 10) / 10;
 
   // Match Record

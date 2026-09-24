@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { Team, STAT_META, getEnhancedTeamStats } from '../data';
+import { PICKLIST_LANE_META, PicklistLane } from '../hooks/usePicklist';
 import { ShieldAlert, Trophy, Palette, ChevronDown, ChevronUp, Scale, CheckSquare, Zap, Cpu, Award } from 'lucide-react';
 
 interface TeamCardProps {
@@ -11,6 +12,7 @@ interface TeamCardProps {
   onToggleCompare?: (team: Team) => void;
   compareIndex?: number;
   onOpenDetails?: (team: Team) => void;
+  picklistLane?: PicklistLane | null;
 }
 
 export function TeamCard({
@@ -20,6 +22,7 @@ export function TeamCard({
   onToggleCompare,
   compareIndex,
   onOpenDetails,
+  picklistLane = null,
 }: TeamCardProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [hoveredStat, setHoveredStat] = useState<string | null>(null);
@@ -40,7 +43,7 @@ export function TeamCard({
       case 'High Threat':
         return <ShieldAlert className="w-3 h-3 mr-1 text-rose-400" />;
       case 'Impact Winner':
-        return <Trophy className="w-3 h-3 mr-1 text-integra-yellow" />;
+        return <Trophy className="w-3 h-3 mr-1 text-accent" />;
       case 'Best Branding':
         return <Palette className="w-3 h-3 mr-1 text-sky-400" />;
       case 'Most Creative':
@@ -87,8 +90,16 @@ export function TeamCard({
         </button>
 
         <div className="flex items-center gap-2">
+          {picklistLane && (
+            <span
+              className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${PICKLIST_LANE_META[picklistLane].badgeClass}`}
+              title="Position on the alliance picklist (P)"
+            >
+              {PICKLIST_LANE_META[picklistLane].short}
+            </span>
+          )}
           {team.number === 3646 && (
-            <span className="px-1.5 py-0.5 rounded bg-integra-yellow/20 text-integra-yellow text-[9px] font-black uppercase tracking-wider border border-integra-yellow/30">
+            <span className="px-1.5 py-0.5 rounded bg-integra-yellow/20 text-accent text-[9px] font-black uppercase tracking-wider border border-integra-yellow/30">
               Host / IntegrA
             </span>
           )}
@@ -117,7 +128,7 @@ export function TeamCard({
           <div className="bg-integra-yellow text-[#111111] border-2 border-[#111111] px-2 py-0.5 text-xs font-montserrat font-black uppercase rounded-xs">
             {team.score} PTS
           </div>
-          <span className="text-[9px] text-integra-yellow mt-1 font-bold uppercase tracking-wider">
+          <span className="text-[9px] text-accent mt-1 font-bold uppercase tracking-wider">
             {team.tier} TIER
           </span>
         </div>
@@ -127,30 +138,30 @@ export function TeamCard({
       <div className="grid grid-cols-3 gap-1.5 py-1 px-2 bg-bg-dark/70 rounded-lg border border-border-main/70 text-center">
         <div className="flex flex-col py-1">
           <span className="text-[8px] font-bold uppercase text-text-muted tracking-wider">EPA Rating</span>
-          <span className="text-xs font-mono font-bold text-integra-yellow">
+          <span className="text-xs font-mono font-bold text-accent">
             {frcStats.epa.total}
           </span>
-          <span className="text-[8px] font-mono text-zinc-400">
+          <span className="text-[8px] font-mono text-text-muted">
             A:{frcStats.epa.auto} T:{frcStats.epa.teleop}
           </span>
         </div>
 
         <div className="flex flex-col py-1 border-x border-border-main/50">
           <span className="text-[8px] font-bold uppercase text-text-muted tracking-wider">OPR / DPR</span>
-          <span className="text-xs font-mono font-bold text-zinc-100">
+          <span className="text-xs font-mono font-bold text-text-main">
             {frcStats.opr}
           </span>
-          <span className="text-[8px] font-mono text-zinc-400">
+          <span className="text-[8px] font-mono text-text-muted">
             DPR: {frcStats.dpr}
           </span>
         </div>
 
         <div className="flex flex-col py-1">
           <span className="text-[8px] font-bold uppercase text-text-muted tracking-wider">Record / WR</span>
-          <span className="text-xs font-mono font-bold text-integra-yellow">
+          <span className="text-xs font-mono font-bold text-accent">
             {frcStats.record.winRate}%
           </span>
-          <span className="text-[8px] font-mono text-zinc-400">
+          <span className="text-[8px] font-mono text-text-muted">
             {frcStats.record.wins}W-{frcStats.record.losses}L
           </span>
         </div>
@@ -159,10 +170,10 @@ export function TeamCard({
       {/* Robot Specs Bar */}
       <div className="flex items-center justify-between text-[10px] text-text-muted bg-surface-hover/60 px-2.5 py-1 rounded-md border border-border-main/50">
         <span className="flex items-center gap-1 font-medium truncate max-w-[190px]" title={frcStats.specs.drivetrain}>
-          <Cpu className="w-3 h-3 text-integra-yellow shrink-0" />
+          <Cpu className="w-3 h-3 text-accent shrink-0" />
           <span className="truncate">{frcStats.specs.drivetrain}</span>
         </span>
-        <span className="font-mono text-zinc-300 font-semibold shrink-0">
+        <span className="font-mono text-text-main/80 font-semibold shrink-0">
           {frcStats.cycles.avgTeleopCycles} cyc
         </span>
       </div>
@@ -173,7 +184,7 @@ export function TeamCard({
           {team.tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-bg-dark text-zinc-300 border border-border-main uppercase tracking-wider"
+              className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold bg-bg-dark text-text-main/80 border border-border-main uppercase tracking-wider"
             >
               {getTagIcon(tag)}
               {tag}
@@ -233,13 +244,13 @@ export function TeamCard({
                 if (active && payload && payload.length) {
                   const data = payload[0].payload;
                   return (
-                    <div className="bg-[#18181b] border border-zinc-700 rounded-lg px-2.5 py-1.5 shadow-xl text-xs z-50">
-                      <div className="font-montserrat font-bold text-zinc-100 text-[11px] mb-1 pb-1 border-b border-zinc-800">
+                    <div className="bg-surface border border-border-main rounded-lg px-2.5 py-1.5 shadow-xl text-xs z-50">
+                      <div className="font-montserrat font-bold text-text-main text-[11px] mb-1 pb-1 border-b border-border-main">
                         {data.fullName}
                       </div>
                       <div className="flex items-center justify-between gap-3 text-[11px]">
-                        <span className="text-zinc-400 font-medium">Scout Rating:</span>
-                        <span className="font-mono font-bold text-integra-yellow">{data.A} / 100</span>
+                        <span className="text-text-muted font-medium">Scout Rating:</span>
+                        <span className="font-mono font-bold text-accent">{data.A} / 100</span>
                       </div>
                     </div>
                   );
@@ -254,7 +265,7 @@ export function TeamCard({
       {/* Scout Summary & Expandable Pros/Cons */}
       <div className="flex-grow flex flex-col justify-end space-y-2.5 pt-1">
         <div className="p-2.5 bg-bg-dark/80 rounded-lg border-l-2 border-l-integra-yellow border-border-main border">
-          <p className="text-[10px] text-zinc-300 italic leading-snug line-clamp-2">
+          <p className="text-[10px] text-text-main/80 italic leading-snug line-clamp-2">
             "{team.critique}"
           </p>
         </div>

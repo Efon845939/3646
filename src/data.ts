@@ -58,7 +58,7 @@ export interface Team {
 export type { FRCPerformanceStats };
 export { getEnhancedTeamStats };
 
-export const mockTeams: Team[] = [
+const RAW_TEAMS: Team[] = [
   {
     "number": 1678,
     "name": "Citrus Circuits",
@@ -2359,3 +2359,13 @@ export const mockTeams: Team[] = [
     }
   }
 ];
+
+// Ranks are derived from score so the leaderboard can never show duplicate or missing
+// positions. Ties keep the hand-curated order (original rank, then team number).
+// Performance stats are resolved once here instead of on every render.
+export const mockTeams: Team[] = [...RAW_TEAMS]
+  .sort((a, b) => b.score - a.score || a.rank - b.rank || a.number - b.number)
+  .map((team, idx) => {
+    const ranked = { ...team, rank: idx + 1 };
+    return { ...ranked, frcStats: ranked.frcStats || getEnhancedTeamStats(ranked) };
+  });

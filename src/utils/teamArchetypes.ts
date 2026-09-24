@@ -1,4 +1,6 @@
 import { Team } from '../data';
+import { getEnhancedTeamStats } from './frcStatsData';
+import { epaWinPercent } from './winProbability';
 
 export interface TeamBehaviorProfile {
   teamNumber: number;
@@ -341,6 +343,9 @@ export interface DerivedArchetypeInfo {
 
 export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): DerivedArchetypeInfo {
   const p = profile || getTeamBehaviorProfile(team);
+  // Classification thresholds stay on the behaviour profile; the numbers quoted in the text
+  // come from scouted stats so they match the rest of the team profile.
+  const scouted = (team.frcStats ?? getEnhancedTeamStats(team)).cycles;
   const tec = team.stats?.tec ?? 50;
   const dat = team.stats?.dat ?? 50;
   const sus = team.stats?.sus ?? 50;
@@ -401,7 +406,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
       description:
         'Sahanın iki ucu arasında saniyeler içinde nota taşıyıp seri şut atan, durmaksızın skor üreten çevrim makinesi.',
       keyStrengths: [
-        `Yüksek çevrim hızı (~${p.cycleDurationBase}s döngü)`,
+        `Yüksek çevrim hızı (~${scouted.avgCycleTimeSec}s döngü)`,
         `${p.autoNoteCount}+ Nota otonom kapasitesi`,
         'Sıfır tereddütlü zemin intake mekanizması',
       ],
@@ -411,7 +416,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
         'Zorlu açılardan veya subwoofer dışından şut verimi düşebilir',
       ],
       scoutingHighlights: [
-        `Temel Çevrim Süresi: ${p.cycleDurationBase}s`,
+        `Temel Çevrim Süresi: ${scouted.avgCycleTimeSec}s`,
         `Otonom Nota Hedefi: ${p.autoNoteCount} Nota`,
         `Şut Stili: ${p.shootingStyle.toUpperCase()}`,
       ],
@@ -478,7 +483,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
       scoutingHighlights: [
         `Geçiş Koridoru: ${p.cycleRoute.toUpperCase()}`,
         `Genel Güvenilirlik: ${score}/100`,
-        `Tırmanış Başarısı: %${Math.round(p.climbProfile.successRate * 100)}`,
+        `Tırmanış Başarısı: %${scouted.climbSuccessPct}`,
       ],
     };
   }
@@ -487,7 +492,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
   return {
     coreArchetype: 'All-rounder',
     detailedArchetype: 'Tactical Multi-Role All-Rounder & Dynamic Anchor',
-    badgeColor: 'text-integra-yellow',
+    badgeColor: 'text-accent',
     borderColor: 'border-integra-yellow/40',
     bgLightColor: 'bg-integra-yellow/15',
     description:
@@ -516,7 +521,6 @@ export interface ProactiveMatchupTactic {
   summary: string;
   recommendedAction: string;
   impact: 'GAME CHANGER' | 'HIGH VALUE' | 'CRITICAL COUNTER';
-  aiPrompt: string;
 }
 
 export interface MatchupTacticsIntel {
@@ -550,19 +554,25 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
     threatLevel = 'MANAGEABLE';
   }
 
-  // Win Probability baseline
-  const scoreDiff = ally.score - rival.score;
-  const tecDiff = (ally.stats.tec || 70) - (rival.stats.tec || 70);
-  const combinedDiff = scoreDiff * 0.6 + tecDiff * 0.4;
-  const winProbabilityEstimate = Math.min(94, Math.max(12, Math.round(50 + combinedDiff * 1.8)));
+  // Same EPA logistic model the match simulator uses, so both screens agree.
+  const allyStats = ally.frcStats ?? getEnhancedTeamStats(ally);
+  const rivalStats = rival.frcStats ?? getEnhancedTeamStats(rival);
+  const winProbabilityEstimate = epaWinPercent(allyStats.epa.total, rivalStats.epa.total);
+
+  // Cycle time and climb success come from the scouted stats (the simulator's primary source
+  // too), so this table agrees with the Pit Scouting tab instead of the behaviour profile.
+  const allyCycle = allyStats.cycles.avgCycleTimeSec;
+  const rivalCycle = rivalStats.cycles.avgCycleTimeSec;
+  const allyClimb = allyStats.cycles.climbSuccessPct;
+  const rivalClimb = rivalStats.cycles.climbSuccessPct;
 
   // Key Matchup Deltas
   const matchupDeltas: MatchupTacticsIntel['matchupDeltas'] = [
     {
       label: 'Döngü Süresi (Cycle)',
-      allyVal: `${allyProfile.cycleDurationBase}s`,
-      rivalVal: `${rivalProfile.cycleDurationBase}s`,
-      advantage: allyProfile.cycleDurationBase < rivalProfile.cycleDurationBase ? 'ally' : allyProfile.cycleDurationBase > rivalProfile.cycleDurationBase ? 'rival' : 'even',
+      allyVal: `${allyCycle}s`,
+      rivalVal: `${rivalCycle}s`,
+      advantage: allyCycle < rivalCycle ? 'ally' : allyCycle > rivalCycle ? 'rival' : 'even',
     },
     {
       label: 'Otonom Nota Potansiyeli',
@@ -584,9 +594,9 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
     },
     {
       label: 'Tırmanış Başarı Oranı',
-      allyVal: `%${Math.round(allyProfile.climbProfile.successRate * 100)}`,
-      rivalVal: `%${Math.round(rivalProfile.climbProfile.successRate * 100)}`,
-      advantage: allyProfile.climbProfile.successRate > rivalProfile.climbProfile.successRate ? 'ally' : allyProfile.climbProfile.successRate < rivalProfile.climbProfile.successRate ? 'rival' : 'even',
+      allyVal: `%${allyClimb}`,
+      rivalVal: `%${rivalClimb}`,
+      advantage: allyClimb > rivalClimb ? 'ally' : allyClimb < rivalClimb ? 'rival' : 'even',
     },
   ];
 
@@ -603,7 +613,6 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       recommendedAction:
         'İlk 3.8 saniyede orta hatta agresif rota çizin. Rakibin hedeflediği 3. ve 4. notayı doğrudan intake edin veya rakibin erişemeyeceği kör noktalara itin.',
       impact: 'GAME CHANGER',
-      aiPrompt: `#${ally.number} ${ally.name} vs #${rival.number} ${rival.name} karşılaşmasında, rakip [${rivalArchetype.coreArchetype}] arketipine sahip. Otonom fazında rakibin ${rivalProfile.autoNoteCount} notalık serisini kırmak için en ideal otonom rotası ve orta çizgi blokaj stratejisi nedir?`,
     });
   } else if (rivalArchetype.coreArchetype === 'Defender') {
     tactics.push({
@@ -614,7 +623,6 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       recommendedAction:
         'Kendi Wing alanınızdaki 3 spike notasını garantiye alın. Rakip savunmaya geçmeden önce +15 ila +20 puanlık tampon oluşturun.',
       impact: 'HIGH VALUE',
-      aiPrompt: `#${ally.number} olarak #${rival.number} [Defender] rakibine karşı otonom fazında temas yasağı varken maksimum puanı garantiye almak için en güvenli spike ve subwoofer atış sekansı nasıl olmalıdır?`,
     });
   } else {
     tactics.push({
@@ -625,7 +633,6 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       recommendedAction:
         'Preload + 2 Wing notasını 9 saniye içinde subwooferdan atıp, teleop için besleme koridoruna konumlanın.',
       impact: 'HIGH VALUE',
-      aiPrompt: `#${ally.number} vs #${rival.number} maçında otonom fazında 2 puanlık Auto Leave ve 3 nota isabetini garantileyecek en verimli otonom pathing adımları nelerdir?`,
     });
   }
 
@@ -635,11 +642,10 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       id: 'teleop-lane-choke',
       phase: 'Teleop Cycle',
       title: 'Orta Saha Koridor Daraltması (Midfield Lane Choke)',
-      summary: `Rakibin ${rivalProfile.cycleDurationBase}s olan döngü süresini serbest koridorları kapatıp 12s+ üzerine çekin.`,
+      summary: `Rakibin ${rivalCycle}s olan döngü süresini serbest koridorları kapatıp 12s+ üzerine çekin.`,
       recommendedAction:
         'İttifak partnerinizi rakibin düz hat transit koridoruna yerleştirin. Bumper temaslarıyla yönünü saptırarak Subwoofer yerine zor açılardan şut atmaya zorlayın.',
       impact: 'GAME CHANGER',
-      aiPrompt: `#${rival.number} ${rival.name} [Cycle-focused] takımının ${rivalProfile.cycleDurationBase} saniyelik çevrim ritmini bozmak için teleopta midfield koridorunu nasıl kapatmalıyız? Swerve pozisyonlanması nasıl olmalı?`,
     });
   } else if (rivalArchetype.coreArchetype === 'Defender') {
     tactics.push({
@@ -650,7 +656,6 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       recommendedAction:
         'Dar koridorlarda kafa kafaya çarpışmaktan kaçının. Trench hattından akın ve partnerinize zemin pası (shuttle pass) aktararak savunmayı boşa çıkarın.',
       impact: 'CRITICAL COUNTER',
-      aiPrompt: `#${rival.number} [Defender] takımı maç boyu sert savunma ve pinleme yapacak. Bu savunmadan sıyrılmak için #${ally.number} robotumuz hangi geçiş koridorlarını (Trench / Wall Chute) ve sürüş tekniklerini kullanmalı?`,
     });
   } else if (rivalArchetype.coreArchetype === 'Long-range Sniper') {
     tactics.push({
@@ -661,7 +666,6 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       recommendedAction:
         'Rakip şut çekmek için durduğu anda gövdenizle AprilTag görüş açısını kapatın veya hafif bir tampon temasıyla volan kalibrasyonunu bozun.',
       impact: 'CRITICAL COUNTER',
-      aiPrompt: `#${rival.number} [Long-range Sniper] takımının uzaktan şut atmasını ve AprilTag kameralarını kilitlemesini engellemek için teleopta nasıl bir gölgeleme ve vizyon engelleme taktiği izlemeliyiz?`,
     });
   } else {
     tactics.push({
@@ -672,7 +676,6 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       recommendedAction:
         'Amp puanı hazırken sahada en az 2 adet dolu robot bekletin. Amp butonuna basıldığı an 10 saniye içinde çift şut boşaltarak +10 puan fark açın.',
       impact: 'HIGH VALUE',
-      aiPrompt: `#${ally.number} ve ittifakımız, #${rival.number} karşısında 10 saniyelik Amplification penceresini maksimum verimle kullanmak için hangi zamanlama ve rol dağılımını yapmalı?`,
     });
   }
 
@@ -685,7 +688,6 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
     recommendedAction:
       'İntake alırken Source sınırları içinde kalın; şut atarken Subwoofer çemberine girin. Buralarda yapılacak temaslar rakibe sarı kart veya teknik faul (Tech Foul, +5 / +10 pts) kazandırır.',
     impact: 'HIGH VALUE',
-    aiPrompt: `#${ally.number} vs #${rival.number} maçında hakem cezalarından (Foul & Tech Foul) kaçınırken, rakibi korumalı alanlarımızda faul yapmaya zorlayacak taktiksel pozisyonlanma kuralları nelerdir?`,
   });
 
   // TACTIC 4: ENDGAME COORDINATION
@@ -698,18 +700,16 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       recommendedAction:
         'Rakip tırmanışa hazırlanırken zincir alanını işgal etmesini geciktirin ve kendi çift tırmanışınızı (Stage Harmony) sakin şekilde tamamlayın.',
       impact: 'GAME CHANGER',
-      aiPrompt: `#${rival.number} takımının Trap & Deep Climb hamlesine karşılık #${ally.number} olarak Endgame'de nasıl bir zamanlama ve ittifak tırmanış düzeni almalıyız?`,
     });
   } else {
     tactics.push({
       id: 'endgame-harmony-lock',
       phase: 'Endgame',
       title: 'Stage Harmony & Derin Tırmanış Sigortası',
-      summary: `Son 20 saniyede riske girmeden %${Math.round(allyProfile.climbProfile.successRate * 100)} başarı oranlı tırmanışı kilitleyin.`,
+      summary: `Son 20 saniyede riske girmeden %${allyClimb} başarı oranlı tırmanışı kilitleyin.`,
       recommendedAction:
         'Kafes / zincir yapısına 135. saniyede yanaşın. Partner robotla aynı zincirde çift tırmanış (Stage Harmony) yaparak +16 ila +20 endgame puanı toplayın.',
       impact: 'HIGH VALUE',
-      aiPrompt: `Endgame son 20 saniyesinde #${ally.number} takımının tırmanış mekanizmasıyla (%${Math.round(allyProfile.climbProfile.successRate * 100)} başarı) Stage Harmony yakalaması için partner koordinasyonu nasıl olmalıdır?`,
     });
   }
 

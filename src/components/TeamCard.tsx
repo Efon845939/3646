@@ -1,8 +1,14 @@
-import React, { useState } from 'react';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
+import React from 'react';
 import { Team, STAT_META, getEnhancedTeamStats } from '../data';
+import { HexRadar, HexRadarAxis } from './HexRadar';
 import { PICKLIST_LANE_META, PicklistLane } from '../hooks/usePicklist';
 import { ShieldAlert, Trophy, Palette, ChevronDown, ChevronUp, Scale, CheckSquare, Zap, Cpu, Award } from 'lucide-react';
+
+const RADAR_AXES: HexRadarAxis[] = (Object.keys(STAT_META) as Array<keyof typeof STAT_META>).map((key) => ({
+  key,
+  label: STAT_META[key].label,
+  fullName: STAT_META[key].fullName,
+}));
 
 interface TeamCardProps {
   topScore?: number;
@@ -25,18 +31,9 @@ export function TeamCard({
   picklistLane = null,
 }: TeamCardProps) {
   const [expanded, setExpanded] = React.useState(false);
-  const [hoveredStat, setHoveredStat] = useState<string | null>(null);
 
   const frcStats = team.frcStats || getEnhancedTeamStats(team);
-
-  const radarData = [
-    { subject: 'OUT', fullName: STAT_META.out.fullName, A: team.stats.out, fullMark: 100 },
-    { subject: 'SUS', fullName: STAT_META.sus.fullName, A: team.stats.sus, fullMark: 100 },
-    { subject: 'TEC', fullName: STAT_META.tec.fullName, A: team.stats.tec, fullMark: 100 },
-    { subject: 'PIP', fullName: STAT_META.pip.fullName, A: team.stats.pip, fullMark: 100 },
-    { subject: 'MED', fullName: STAT_META.med.fullName, A: team.stats.med, fullMark: 100 },
-    { subject: 'DAT', fullName: STAT_META.dat.fullName, A: team.stats.dat, fullMark: 100 },
-  ];
+  const radarValues = RADAR_AXES.map((axis) => team.stats[axis.key as keyof Team['stats']]);
 
   const getTagIcon = (tag: string) => {
     switch (tag) {
@@ -195,71 +192,17 @@ export function TeamCard({
 
       {/* Radar Chart */}
       <div className="h-[185px] w-full relative">
-        <ResponsiveContainer width="100%" height="100%">
-          <RadarChart cx="50%" cy="50%" outerRadius="72%" data={radarData}>
-            <PolarGrid stroke="#27272a" strokeWidth={1} />
-            <PolarAngleAxis
-              dataKey="subject"
-              tick={(props: any) => {
-                const { payload, x, y, textAnchor } = props;
-                const subjectVal = payload.value;
-                const matched = radarData.find((d) => d.subject === subjectVal);
-                const fullName = matched?.fullName || subjectVal;
-                const isHovered = hoveredStat === subjectVal;
-
-                return (
-                  <g
-                    className="cursor-pointer select-none"
-                    onMouseEnter={() => setHoveredStat(subjectVal)}
-                    onMouseLeave={() => setHoveredStat(null)}
-                  >
-                    <title>{fullName}</title>
-                    <text
-                      x={x}
-                      y={y}
-                      textAnchor={textAnchor}
-                      fill={isHovered ? '#FEDE00' : '#A1A1AA'}
-                      fontSize={isHovered ? 10 : 9}
-                      fontFamily="Montserrat"
-                      fontWeight={isHovered ? 800 : 700}
-                      className="transition-colors duration-150"
-                    >
-                      {isHovered ? fullName : subjectVal}
-                    </text>
-                  </g>
-                );
-              }}
-            />
-            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-            <Radar
-              name="Stats"
-              dataKey="A"
-              stroke="#FEDE00"
-              strokeWidth={1.75}
-              fill="#FEDE00"
-              fillOpacity={0.25}
-            />
-            <Tooltip
-              content={({ active, payload }) => {
-                if (active && payload && payload.length) {
-                  const data = payload[0].payload;
-                  return (
-                    <div className="bg-surface border border-border-main rounded-lg px-2.5 py-1.5 shadow-xl text-xs z-50">
-                      <div className="font-montserrat font-bold text-text-main text-[11px] mb-1 pb-1 border-b border-border-main">
-                        {data.fullName}
-                      </div>
-                      <div className="flex items-center justify-between gap-3 text-[11px]">
-                        <span className="text-text-muted font-medium">Scout Rating:</span>
-                        <span className="font-mono font-bold text-accent">{data.A} / 100</span>
-                      </div>
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-          </RadarChart>
-        </ResponsiveContainer>
+        <HexRadar
+          axes={RADAR_AXES}
+          series={[
+            {
+              name: `#${team.number}`,
+              values: radarValues,
+              polygonClass: 'fill-integra-yellow/25 stroke-accent',
+              dotClass: 'fill-accent',
+            },
+          ]}
+        />
       </div>
 
       {/* Scout Summary & Expandable Pros/Cons */}

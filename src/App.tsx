@@ -18,8 +18,6 @@ import { motion } from 'motion/react';
 import { mockTeams, Team } from './data';
 import { TeamCard } from './components/TeamCard';
 import { TeamTableView } from './components/TeamTableView';
-import { TeamModal } from './components/TeamModal';
-import { TeamCompare } from './components/TeamCompare';
 import { PicklistBoard } from './components/PicklistBoard';
 import { QuickCompareBar } from './components/QuickCompareBar';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
@@ -34,6 +32,14 @@ import { readStorage, writeStorage } from './utils/storage';
 const MatchSimulator = lazy(() =>
   import('./components/MatchSimulator').then((m) => ({ default: m.MatchSimulator }))
 );
+
+// The team modal and compare view are the only screens that use the charting library, so
+// they load as separate chunks too. Each loader is also called once the browser is idle
+// (see the prefetch effect in App), so the first click on a team does not wait on the network.
+const loadTeamModal = () => import('./components/TeamModal');
+const loadTeamCompare = () => import('./components/TeamCompare');
+const TeamModal = lazy(() => loadTeamModal().then((m) => ({ default: m.TeamModal })));
+const TeamCompare = lazy(() => loadTeamCompare().then((m) => ({ default: m.TeamCompare })));
 
 type SortOption = 'score-desc' | 'score-asc' | 'rank-asc' | 'rank-desc';
 type ViewMode = 'grid' | 'table';
@@ -66,6 +72,21 @@ export default function App() {
   useEffect(() => {
     writeStorage('integra_view_mode', viewMode);
   }, [viewMode]);
+
+  // Warm the lazily loaded screens once the dashboard has painted and the browser is idle.
+  useEffect(() => {
+    const prefetch = () => {
+      void loadTeamModal();
+      void loadTeamCompare();
+    };
+    // Older Safari has no requestIdleCallback; fall back to a short timer there.
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(prefetch, { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(prefetch, 1500);
+    return () => clearTimeout(id);
+  }, []);
 
   const toggleTheme = () => setIsDark((prev) => !prev);
 
@@ -345,14 +366,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="max-w-[1240px] mx-auto px-4 sm:px-6 py-2">
         {activeView === 'simulator' ? (
-          <Suspense
-            fallback={
-              <div className="flex items-center justify-center gap-2 py-24 text-xs text-text-muted font-mono uppercase tracking-wider bg-surface border border-border-main rounded-xl">
-                <Loader2 className="w-4 h-4 animate-spin text-accent" />
-                Loading match simulator…
-              </div>
-            }
-          >
+          <Suspense fallback={<ViewLoader label="Loading match simulator…" />}>
             <MatchSimulator
               onClose={() => setActiveView('dashboard')}
               initialTeamA={simInitialTeamA}
@@ -360,13 +374,15 @@ export default function App() {
             />
           </Suspense>
         ) : activeView === 'compare' ? (
-          <TeamCompare
-            teams={compareTeams}
-            onAddTeam={(t) => setCompareTeams((prev) => [...prev, t])}
-            onRemoveTeam={(t) => setCompareTeams((prev) => prev.filter((ct) => ct.number !== t.number))}
-            onClose={() => setActiveView('dashboard')}
-            onOpenSimulator={(teamA, teamB) => handleOpenSimulator(teamA, teamB)}
-          />
+          <Suspense fallback={<ViewLoader label="Loading team comparison…" />}>
+            <TeamCompare
+              teams={compareTeams}
+              onAddTeam={(t) => setCompareTeams((prev) => [...prev, t])}
+              onRemoveTeam={(t) => setCompareTeams((prev) => prev.filter((ct) => ct.number !== t.number))}
+              onClose={() => setActiveView('dashboard')}
+              onOpenSimulator={(teamA, teamB) => handleOpenSimulator(teamA, teamB)}
+            />
+          </Suspense>
         ) : activeView === 'picklist' ? (
           <PicklistBoard
             picklist={picklist}
@@ -531,15 +547,23 @@ export default function App() {
 
       {/* Team Detail Modal */}
       {selectedTeam && (
-        <TeamModal
-          team={selectedTeam}
-          onClose={() => setSelectedTeam(null)}
-          isSelectedForCompare={compareTeams.some((t) => t.number === selectedTeam.number)}
-          onToggleCompare={handleToggleCompare}
-          onOpenSimulator={handleOpenSimulator}
-          picklistLane={picklist.laneByTeam.get(selectedTeam.number) ?? null}
-          onSetPicklistLane={(team, lane) => picklist.moveTeam(team.number, lane)}
-        />
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85">
+              <Loader2 className="w-6 h-6 animate-spin text-integra-yellow" aria-label="Loading team profile" />
+            </div>
+          }
+        >
+          <TeamModal
+            team={selectedTeam}
+            onClose={() => setSelectedTeam(null)}
+            isSelectedForCompare={compareTeams.some((t) => t.number === selectedTeam.number)}
+            onToggleCompare={handleToggleCompare}
+            onOpenSimulator={handleOpenSimulator}
+            picklistLane={picklist.laneByTeam.get(selectedTeam.number) ?? null}
+            onSetPicklistLane={(team, lane) => picklist.moveTeam(team.number, lane)}
+          />
+        </Suspense>
       )}
 
       {/* Floating Quick Compare Bar appears when at least 2 teams are selected */}
@@ -573,6 +597,15 @@ export default function App() {
 
       {/* Global Keyboard Shortcuts Help Modal */}
       <KeyboardShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
+    </div>
+  );
+}
+
+function ViewLoader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 py-24 text-xs text-text-muted font-mono uppercase tracking-wider bg-surface border border-border-main rounded-xl">
+      <Loader2 className="w-4 h-4 animate-spin text-accent" />
+      {label}
     </div>
   );
 }

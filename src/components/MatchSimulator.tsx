@@ -46,6 +46,7 @@ import { frcAudio } from '../utils/frcAudio';
 import { getTeamBehaviorProfile } from '../utils/teamArchetypes';
 import { epaWinPercent } from '../utils/winProbability';
 import { buildDefaultLineup } from '../utils/defaultLineup';
+import { driveToward } from '../utils/robotKinematics';
 
 interface MatchSimulatorProps {
   onClose: () => void;
@@ -139,6 +140,9 @@ export function MatchSimulator({
 
   // Animation Loop Refs
   const rafRef = useRef<number | null>(null);
+  // Timestamp of the last simulated frame. The tick effect below re-subscribes on every state
+  // change, so the frame clock must live outside it or each frame's delta is mis-measured.
+  const lastFrameTimeRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number | null>(null);
   const feedEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -338,13 +342,16 @@ export function MatchSimulator({
 
   // Main simulation tick
   useEffect(() => {
-    if (!isRunning) return;
-
-    let prevTime = performance.now();
+    if (!isRunning) {
+      lastFrameTimeRef.current = null; // paused time must not count as one huge frame
+      return;
+    }
 
     const loop = (time: number) => {
-      const realDeltaMs = time - prevTime;
-      prevTime = time;
+      const prevTime = lastFrameTimeRef.current ?? time;
+      lastFrameTimeRef.current = time;
+      // Clamp to 0–100 ms so a background tab or a slow frame cannot teleport robots.
+      const realDeltaMs = Math.min(100, Math.max(0, time - prevTime));
 
       const simDeltaSec = (realDeltaMs / 1000) * speedMode;
       const nextElapsed = elapsedSeconds + simDeltaSec;
@@ -529,35 +536,31 @@ export function MatchSimulator({
           launchProjectile(curr.x, curr.y, speakerX, speakerY, alliance, autoPoints, 'Auto Speaker (5pts)');
         }
 
-        // Auto Swerve pathing
+        // Auto Swerve pathing: alternate between a centerline note and the subwoofer. The robot
+        // drives toward each waypoint (see driveToward) rather than being placed on it.
         const t = (sec % autoCycleCadence) / autoCycleCadence;
+        const noteLane = (autoShotIndex % 3) - 1; // spread successive notes along the centerline
+        let target: { x: number; y: number };
         if (t < 0.45) {
-          // Intake run to center
-          next.x = isBlue ? 15 + t * 70 : 85 - t * 70;
-          next.y = 50 + Math.sin(t * Math.PI) * 20;
+          target = { x: isBlue ? 44 : 56, y: 50 + noteLane * 18 };
           next.action = 'Centerline Sweep';
           next.intakeState = 'intaking';
         } else {
-          // Return to subwoofer & shoot
-          next.x = isBlue ? 18 : 82;
-          next.y = 24;
+          target = { x: isBlue ? 18 : 82, y: 24 };
           next.action = 'Auto Align & Shoot';
           next.intakeState = 'shooting';
           next.limelightLocked = true;
         }
 
-        next.speedMps = 4.8;
         next.shooterRpm = 5500;
         next.batteryVoltage = 12.1;
-        return next;
+        return Object.assign(next, driveToward(curr, target.x, target.y, 4.8, deltaSec));
       }
 
       if (isEndgame) {
-        // Endgame Climb Sequence
-        next.x = isBlue ? 45 : 55;
-        next.y = 50;
-        next.action = 'Stage Latching';
-        next.speedMps = 0.5;
+        // Endgame Climb Sequence: drive to the stage, then latch once there.
+        Object.assign(next, driveToward(curr, isBlue ? 45 : 55, 50, 4.0, deltaSec));
+        next.action = next.speedMps > 0 ? 'Driving to Stage' : 'Stage Latching';
 
         if (sec >= 142 && !next.climbed) {
           const success = Math.random() < stats.cycles.climbSuccessPct / 100;
@@ -582,21 +585,19 @@ export function MatchSimulator({
         return next;
       }
 
-      // Teleoperated Cycling
-      if (cyclePhaseProgress < 0.4) {
-        // Moving to Source / Ground Piece
+      // Teleoperated Cycling: pick a waypoint for the current part of the cycle and drive to it.
+      const pickupSpot = { x: isBlue ? 26 : 74, y: 74 };
+      const shootingSpot = { x: isBlue ? 22 : 78, y: 28 };
+      const inPickupLeg = cyclePhaseProgress < 0.4;
+      const waypoint = inPickupLeg ? pickupSpot : shootingSpot;
+      Object.assign(next, driveToward(curr, waypoint.x, waypoint.y, inPickupLeg ? 5.2 : 4.5, deltaSec));
+
+      if (inPickupLeg) {
         next.action = 'Source Transit';
-        next.x = isBlue ? 18 + cyclePhaseProgress * 30 : 82 - cyclePhaseProgress * 30;
-        next.y = 70;
-        next.speedMps = 5.2;
         next.intakeState = 'intaking';
         next.limelightLocked = false;
       } else if (cyclePhaseProgress < 0.75) {
-        // Sprinting to scoring zone
         next.action = 'Shooting Line Run';
-        next.x = isBlue ? 22 : 78;
-        next.y = 28;
-        next.speedMps = 4.5;
         next.intakeState = 'indexing';
         next.limelightLocked = true;
       } else if (cyclePhaseProgress >= 0.95 && curr.action !== 'Scored') {

@@ -18,6 +18,8 @@ interface HexRadarProps {
   series: HexRadarSeries[];
   max?: number;
   className?: string;
+  /** Compact mode draws only the shape; axis names stay in the accessible title. */
+  showLabels?: boolean;
 }
 
 const RADIUS = 62;
@@ -38,15 +40,16 @@ const toPoints = (coords: Array<[number, number]>) => coords.map(([x, y]) => `${
  * plain SVG replaces a charting library there: no resize observers, no animation loop,
  * and the library stays out of the initial bundle.
  */
-export function HexRadar({ axes, series, max = 100, className = '' }: HexRadarProps) {
+export function HexRadar({ axes, series, max = 100, className = '', showLabels = true }: HexRadarProps) {
   const [hovered, setHovered] = useState<number | null>(null);
   const n = axes.length;
   const primary = series[0];
 
   const summary = axes.map((a, i) => `${a.fullName} ${primary?.values[i] ?? 0}`).join(', ');
+  const viewBox = showLabels ? '-140 -92 280 184' : '-66 -66 132 132';
 
   return (
-    <svg viewBox="-140 -92 280 184" className={`w-full h-full select-none ${className}`} role="img" aria-label={summary}>
+    <svg viewBox={viewBox} className={`w-full h-full select-none ${className}`} role="img" aria-label={summary}>
       <title>{summary}</title>
 
       {/* Concentric grid and spokes */}
@@ -85,7 +88,7 @@ export function HexRadar({ axes, series, max = 100, className = '' }: HexRadarPr
       ))}
 
       {/* Vertices with generous invisible hit areas for hover */}
-      {primary?.values.map((v, i) => {
+      {showLabels && primary?.values.map((v, i) => {
         const [x, y] = polar(i, n, (Math.max(0, Math.min(max, v)) / max) * RADIUS);
         return (
           <g key={axes[i].key} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}>
@@ -96,7 +99,7 @@ export function HexRadar({ axes, series, max = 100, className = '' }: HexRadarPr
       })}
 
       {/* Axis labels: the short code by default, full name and value while hovered */}
-      {axes.map((axis, i) => {
+      {showLabels && axes.map((axis, i) => {
         const [x, y] = polar(i, n, LABEL_RADIUS);
         const anchor = x > 1 ? 'start' : x < -1 ? 'end' : 'middle';
         const dy = y < -1 ? -2 : y > 1 ? 8 : 3;

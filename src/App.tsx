@@ -169,10 +169,6 @@ export default function App() {
 
   const highestScore = Math.max(...mockTeams.map((t) => t.score));
   const averageScore = (mockTeams.reduce((acc, t) => acc + t.score, 0) / mockTeams.length).toFixed(1);
-  const averageEPA = (
-    mockTeams.reduce((acc, t) => acc + (t.frcStats?.epa.total ?? 0), 0) / mockTeams.length
-  ).toFixed(1);
-  const hostStats = hostTeam.frcStats!;
   const picklistCount = picklist.lists.first.length + picklist.lists.second.length;
 
   useGlobalShortcuts({
@@ -211,7 +207,7 @@ export default function App() {
             #3646
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] text-text-muted tracking-widest uppercase font-bold">
+            <span className="text-xs text-text-muted tracking-widest uppercase font-bold">
               Pre-PR Scouting & Analytics
             </span>
             <span className="text-base sm:text-lg font-black font-montserrat tracking-tight text-text-main">
@@ -222,7 +218,7 @@ export default function App() {
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mt-3 lg:mt-0 w-full lg:w-auto justify-end">
           {/* View Mode Toggle Button */}
-          <div className="inline-flex rounded-lg bg-surface p-0.5 border border-border-main text-xs font-bold uppercase">
+          <div className="inline-flex rounded-lg bg-surface p-0.5 border border-border-main text-sm font-bold uppercase">
             {(
               [
                 { mode: 'grid', label: 'Grid', icon: LayoutGrid, title: 'Card Grid View (Shortcut: V)' },
@@ -237,14 +233,14 @@ export default function App() {
                   setActiveView('dashboard');
                 }}
                 aria-pressed={viewMode === mode}
-                className={`px-2.5 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
                   viewMode === mode && activeView === 'dashboard'
                     ? 'bg-integra-yellow text-[#111111] font-black'
                     : 'text-text-muted hover:text-text-main'
                 }`}
                 title={title}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-4 h-4" />
                 <span className="hidden sm:inline">{label}</span>
               </button>
             ))}
@@ -287,9 +283,6 @@ export default function App() {
             title={`Export ${filteredAndSortedTeams.length} filtered teams to CSV (Shortcut: E)`}
           >
             <Download className="w-4 h-4" />
-            <kbd className="hidden xl:inline-block text-[9px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
-              E
-            </kbd>
           </button>
 
           {/* Theme Toggle */}
@@ -301,9 +294,6 @@ export default function App() {
             title={`Toggle Theme (Shortcut: T) - Currently ${isDark ? 'Dark' : 'Light'}`}
           >
             {isDark ? <Sun className="w-4 h-4 text-accent" /> : <Moon className="w-4 h-4 text-text-main" />}
-            <kbd className="hidden xl:inline-block text-[9px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
-              T
-            </kbd>
           </button>
 
           {/* Keyboard Shortcuts Trigger */}
@@ -315,13 +305,10 @@ export default function App() {
             title="Keyboard Shortcuts (Shortcut: ?)"
           >
             <Keyboard className="w-4 h-4 text-accent" />
-            <kbd className="hidden sm:inline-block text-[9px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted font-bold">
-              ?
-            </kbd>
           </button>
 
           {/* Team Search Input */}
-          <div className="bg-surface p-2 rounded-lg border border-border-main flex items-center space-x-2 w-full lg:w-60 relative transition-colors duration-200 focus-within:border-accent">
+          <div className="bg-surface p-2 rounded-lg border border-border-main flex items-center space-x-2 w-full lg:w-72 relative transition-colors duration-200 focus-within:border-accent">
             <Search className="w-4 h-4 text-text-muted absolute left-3 pointer-events-none" />
             <input
               id="main-search-input"
@@ -335,7 +322,7 @@ export default function App() {
                 setSearchQuery(e.target.value);
                 if (activeView !== 'dashboard') setActiveView('dashboard');
               }}
-              className="bg-transparent outline-none text-xs w-full pl-6 pr-10 placeholder-text-muted text-text-main"
+              className="bg-transparent outline-none text-sm w-full pl-6 pr-10 placeholder-text-muted text-text-main"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searchQuery && (
@@ -364,7 +351,7 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="max-w-[1240px] mx-auto px-4 sm:px-6 py-2">
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-2">
         {activeView === 'simulator' ? (
           <Suspense fallback={<ViewLoader label="Loading match simulator…" />}>
             <MatchSimulator
@@ -393,43 +380,24 @@ export default function App() {
         ) : (
           <>
             {/* KPI Stats Overview Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
-              <div className="bg-surface p-4 rounded-xl border border-border-main relative overflow-hidden transition-colors duration-200">
-                <div className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Total Teams Scouted</div>
-                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-text-main">{mockTeams.length}</div>
-                <div className="text-[10px] text-text-muted font-mono mt-0.5">Field avg EPA {averageEPA}</div>
-                <div className="absolute -right-2 -bottom-2 opacity-5 text-4xl">
-                  <Hexagon size={64} />
-                </div>
-              </div>
-
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <KpiCard label="Teams Scouted" value={mockTeams.length} />
               <button
                 type="button"
                 onClick={() => setSelectedTeam(hostTeam)}
-                className="text-left bg-surface hover:bg-surface-hover p-4 rounded-xl border border-border-main border-l-4 border-l-integra-yellow transition-colors duration-200"
+                className="text-left bg-surface hover:bg-surface-hover p-5 rounded-2xl border border-border-main border-l-4 border-l-integra-yellow transition-colors duration-200"
                 title="Open #3646 scouting profile"
               >
-                <div className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Host Team</div>
-                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-text-main">#3646 IntegrA</div>
-                <div className="text-[10px] text-text-muted font-mono mt-0.5">
-                  Rank #{hostTeam.rank} · EPA {hostStats.epa.total} · Top {(100 - hostStats.epa.percentile).toFixed(1)}%
-                </div>
+                <div className="text-text-muted text-xs uppercase font-bold tracking-wider">Host Team</div>
+                <div className="text-3xl font-montserrat font-black mt-1 text-text-main">#3646 IntegrA</div>
               </button>
-
-              <div className="bg-surface p-4 rounded-xl border border-border-main transition-colors duration-200">
-                <div className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Peak Pre-PR Score</div>
-                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-accent">{highestScore}</div>
-              </div>
-
-              <div className="bg-surface p-4 rounded-xl border border-border-main transition-colors duration-200">
-                <div className="text-text-muted text-[10px] uppercase font-bold tracking-wider">Average Field Score</div>
-                <div className="text-2xl sm:text-3xl font-montserrat font-black mt-1 text-text-main">{averageScore}</div>
-              </div>
+              <KpiCard label="Peak Pre-PR Score" value={highestScore} accent />
+              <KpiCard label="Average Score" value={averageScore} />
             </div>
 
             {/* Quick Sort & Filter Chips */}
-            <div className="flex flex-wrap items-center justify-between gap-2 py-1 mb-5">
-              <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-3 py-1 mb-6">
+              <div className="flex flex-wrap items-center gap-2">
                 <FilterChip
                   id="filter-btn-score-high"
                   active={sortBy === 'score-desc'}
@@ -451,7 +419,6 @@ export default function App() {
 
                 {QUICK_FILTERS.map((filter) => {
                   const Icon = filter.icon;
-                  const count = mockTeams.filter(filter.matches).length;
                   const isActive = activeFilter === filter.id;
                   return (
                     <FilterChip
@@ -462,11 +429,8 @@ export default function App() {
                       shortcut={filter.shortcut}
                       title={`${filter.description} (Shortcut: ${filter.shortcut})`}
                     >
-                      <Icon className={`w-3 h-3 ${isActive ? 'text-[#111111]' : filter.iconClass}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-[#111111]' : filter.iconClass}`} />
                       <span>{filter.label}</span>
-                      <span className={`font-mono text-[10px] ${isActive ? 'text-[#111111]/70' : 'text-text-muted'}`}>
-                        {count}
-                      </span>
                     </FilterChip>
                   );
                 })}
@@ -477,17 +441,14 @@ export default function App() {
                     onClick={resetFilters}
                     aria-keyshortcuts="0"
                     title="Reset All Filters (Shortcut: 0)"
-                    className="text-xs text-text-muted hover:text-text-main underline ml-2 flex items-center gap-1"
+                    className="text-sm text-text-muted hover:text-text-main underline ml-2"
                   >
-                    <span>Clear Filters</span>
-                    <kbd className="text-[9px] font-mono px-1 py-0.2 rounded bg-surface border border-border-main">
-                      0
-                    </kbd>
+                    Clear filters
                   </button>
                 )}
               </div>
 
-              <div className="text-xs text-text-muted font-mono">
+              <div className="text-sm text-text-muted">
                 Showing <span className="font-bold text-text-main">{filteredAndSortedTeams.length}</span> teams
               </div>
             </div>
@@ -495,7 +456,7 @@ export default function App() {
             {/* Main Teams Presentation: Grid View vs Table View */}
             {filteredAndSortedTeams.length > 0 ? (
               viewMode === 'grid' ? (
-                <motion.div layout className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                <motion.div layout className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
                   {filteredAndSortedTeams.map((team, idx) => (
                     <motion.div
                       layout
@@ -508,7 +469,6 @@ export default function App() {
                     >
                       <TeamCard
                         team={team}
-                        topScore={highestScore}
                         isSelectedForCompare={compareTeams.some((t) => t.number === team.number)}
                         onToggleCompare={handleToggleCompare}
                         compareIndex={compareTeams.findIndex((t) => t.number === team.number)}
@@ -601,9 +561,18 @@ export default function App() {
   );
 }
 
+function KpiCard({ label, value, accent = false }: { label: string; value: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="bg-surface p-5 rounded-2xl border border-border-main transition-colors duration-200">
+      <div className="text-text-muted text-xs uppercase font-bold tracking-wider">{label}</div>
+      <div className={`text-3xl font-montserrat font-black mt-1 ${accent ? 'text-accent' : 'text-text-main'}`}>{value}</div>
+    </div>
+  );
+}
+
 function ViewLoader({ label }: { label: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-24 text-xs text-text-muted font-mono uppercase tracking-wider bg-surface border border-border-main rounded-xl">
+    <div className="flex items-center justify-center gap-2 py-24 text-sm text-text-muted font-mono uppercase tracking-wider bg-surface border border-border-main rounded-xl">
       <Loader2 className="w-4 h-4 animate-spin text-accent" />
       {label}
     </div>
@@ -634,7 +603,7 @@ function NavViewButton({
       onClick={onClick}
       aria-pressed={active}
       aria-keyshortcuts={shortcut}
-      className={`px-3 py-1.5 rounded-lg border transition-colors flex items-center justify-center font-bold text-xs gap-1.5 uppercase ${
+      className={`px-3.5 py-2 rounded-lg border transition-colors flex items-center justify-center font-bold text-sm gap-2 uppercase ${
         active
           ? 'bg-integra-yellow text-[#111111] border-integra-yellow'
           : 'bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main border-border-main'
@@ -642,15 +611,8 @@ function NavViewButton({
       title={title}
     >
       {/* Icon switches to black on the active yellow background, otherwise it disappears. */}
-      <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#111111]' : 'text-accent'}`} />
+      <Icon className={`w-4 h-4 ${active ? 'text-[#111111]' : 'text-accent'}`} />
       <span>{label}</span>
-      <kbd
-        className={`hidden sm:inline-block px-1 py-0.2 text-[9px] font-mono rounded border ${
-          active ? 'bg-black/15 border-black/20 text-[#111111]' : 'bg-bg-dark border-border-main text-text-muted'
-        }`}
-      >
-        {shortcut}
-      </kbd>
     </button>
   );
 }
@@ -678,20 +640,13 @@ function FilterChip({
       aria-pressed={active}
       aria-keyshortcuts={shortcut}
       title={title}
-      className={`px-3 py-1 rounded-full border text-xs transition-colors font-semibold flex items-center gap-1.5 ${
+      className={`px-4 py-1.5 rounded-full border text-sm transition-colors font-semibold flex items-center gap-2 ${
         active
           ? 'bg-integra-yellow text-[#111111] border-integra-yellow font-bold'
           : 'border-border-main text-text-muted hover:text-text-main bg-surface'
       }`}
     >
       {children}
-      <kbd
-        className={`text-[9px] font-mono px-1 py-0.2 rounded ${
-          active ? 'bg-black/20 text-[#111111]' : 'bg-bg-dark border border-border-main'
-        }`}
-      >
-        {shortcut}
-      </kbd>
     </button>
   );
 }

@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --bg-main: #f9fafb;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f3f4f6;
+  --text-main: #111111;
+  --text-muted: #6b7280;
+  --border-main: #e5e7eb;
+}
+
+.dark {
+  --bg-main: #111111;
+  --bg-surface: #1C1C1E;
+  --bg-surface-hover: #2C2C2E;
+  --text-main: #ffffff;
+  --text-muted: #9ca3af;
+  --border-main: #374151;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+}
+
+@theme {
+  --color-integra-yellow: #FEDE00;
+  --color-bg-dark: var(--bg-main);
+  --color-surface: var(--bg-surface);
+  --color-surface-hover: var(--bg-surface-hover);
+  --color-text-main: var(--text-main);
+  --color-text-muted: var(--text-muted);
+  --color-border-main: var(--border-main);
+  
+  --font-inter: "Inter", sans-serif;
+  --font-montserrat: "Montserrat", sans-serif;
+}

@@ -44,6 +44,7 @@ import {
 } from './simulationTypes';
 import { frcAudio } from '../utils/frcAudio';
 import { getTeamBehaviorProfile } from '../utils/teamArchetypes';
+import { epaWinPercent } from '../utils/winProbability';
 
 interface MatchSimulatorProps {
   onClose: () => void;
@@ -63,29 +64,18 @@ export function MatchSimulator({
   // Mode: 1v1 duel or 3v3 playoff alliance
   const [simMode, setSimMode] = useState<SimMode>('3v3');
 
+  // Six distinct robots, resolved once on mount (see buildDefaultLineup).
+  const [defaultLineup] = useState(() => buildDefaultLineup(initialTeamA, initialTeamB));
+
   // Blue Alliance Teams (Captain, 1st Pick, 2nd Pick)
-  const [blueCaptain, setBlueCaptain] = useState<Team>(() => {
-    if (initialTeamA) return initialTeamA;
-    return mockTeams.find((t) => t.number === 3646) || mockTeams[0];
-  });
-  const [bluePick1, setBluePick1] = useState<Team>(() => {
-    return mockTeams.find((t) => t.number === 1678) || mockTeams[1];
-  });
-  const [bluePick2, setBluePick2] = useState<Team>(() => {
-    return mockTeams.find((t) => t.number === 498) || mockTeams[2];
-  });
+  const [blueCaptain, setBlueCaptain] = useState<Team>(defaultLineup.blueCaptain);
+  const [bluePick1, setBluePick1] = useState<Team>(defaultLineup.bluePick1);
+  const [bluePick2, setBluePick2] = useState<Team>(defaultLineup.bluePick2);
 
   // Red Alliance Teams (Captain, 1st Pick, 2nd Pick)
-  const [redCaptain, setRedCaptain] = useState<Team>(() => {
-    if (initialTeamB && initialTeamB.number !== blueCaptain.number) return initialTeamB;
-    return mockTeams.find((t) => t.number === 254) || mockTeams[3] || mockTeams[1];
-  });
-  const [redPick1, setRedPick1] = useState<Team>(() => {
-    return mockTeams.find((t) => t.number === 118) || mockTeams[4] || mockTeams[2];
-  });
-  const [redPick2, setRedPick2] = useState<Team>(() => {
-    return mockTeams.find((t) => t.number === 6328) || mockTeams[5] || mockTeams[0];
-  });
+  const [redCaptain, setRedCaptain] = useState<Team>(defaultLineup.redCaptain);
+  const [redPick1, setRedPick1] = useState<Team>(defaultLineup.redPick1);
+  const [redPick2, setRedPick2] = useState<Team>(defaultLineup.redPick2);
 
   // Strategic Playbooks per Alliance
   const [blueStrategy, setBlueStrategy] = useState<AllianceStrategy>('triple_offense');
@@ -196,10 +186,7 @@ export function MatchSimulator({
         ? Math.round((rCapStats.epa.endgame + rP1Stats.epa.endgame + rP2Stats.epa.endgame) * 10) / 10
         : rCapStats.epa.endgame;
 
-    // Statbotics Win Probability formula: P(Blue) = 1 / (1 + 10^((RedEPA - BlueEPA) / 28))
-    const diff = blueTotalEPA - redTotalEPA;
-    const exponent = -diff / 26;
-    const winProb = Math.min(96, Math.max(4, Math.round((1 / (1 + Math.pow(10, exponent))) * 100)));
+    const winProb = epaWinPercent(blueTotalEPA, redTotalEPA);
 
     return {
       blueTotalEPA,
@@ -752,7 +739,7 @@ export function MatchSimulator({
       {/* Top Header & Navigation Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-border-main gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-amber-500/20 text-integra-yellow rounded-xl border border-integra-yellow/40">
+          <div className="p-2.5 bg-amber-500/20 text-accent rounded-xl border border-integra-yellow/40">
             <Swords className="w-6 h-6" />
           </div>
           <div>
@@ -891,7 +878,7 @@ export function MatchSimulator({
                     }`}
                   >
                     <span className="font-bold text-[11px] block">{s.label}</span>
-                    <span className="text-[9px] text-zinc-400 block">{s.desc}</span>
+                    <span className="text-[9px] text-text-muted block">{s.desc}</span>
                   </button>
                 ))}
               </div>
@@ -966,7 +953,7 @@ export function MatchSimulator({
                     }`}
                   >
                     <span className="font-bold text-[11px] block">{s.label}</span>
-                    <span className="text-[9px] text-zinc-400 block">{s.desc}</span>
+                    <span className="text-[9px] text-text-muted block">{s.desc}</span>
                   </button>
                 ))}
               </div>
@@ -1146,7 +1133,7 @@ export function MatchSimulator({
             onClick={() => setAudioEnabled(!audioEnabled)}
             className={`p-2 rounded-lg border transition-colors ${
               audioEnabled
-                ? 'bg-surface text-integra-yellow border-border-main'
+                ? 'bg-surface text-accent border-border-main'
                 : 'bg-surface text-text-muted border-border-main'
             }`}
             title={audioEnabled ? 'Mute FRC Audio' : 'Unmute FRC Audio'}
@@ -1180,7 +1167,7 @@ export function MatchSimulator({
         <div className="xl:col-span-2 flex flex-col gap-3">
           <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-text-muted">
             <span className="flex items-center gap-1.5">
-              <Activity className="w-4 h-4 text-integra-yellow" />
+              <Activity className="w-4 h-4 text-accent" />
               FRC Competition Field (Swerve & Vision Kinematics)
             </span>
             <span className="font-mono text-[10px]">16.54m × 8.21m Regulation</span>
@@ -1307,7 +1294,7 @@ export function MatchSimulator({
                   </div>
                   <div className="flex justify-between pt-2 border-t border-border-main text-text-main font-bold">
                     <span>Ranking Points (RP):</span>
-                    <span className="font-mono text-integra-yellow">
+                    <span className="font-mono text-accent">
                       {winner === 'blue' ? '2' : winner === 'tie' ? '1' : '0'} Win RP +{' '}
                       {blueTotal >= 50 ? '1 Melody RP' : '0 RP'} +{' '}
                       {blueRobot.climbed ? '1 Ensemble RP' : '0 RP'}
@@ -1348,7 +1335,7 @@ export function MatchSimulator({
                   </div>
                   <div className="flex justify-between pt-2 border-t border-border-main text-text-main font-bold">
                     <span>Ranking Points (RP):</span>
-                    <span className="font-mono text-integra-yellow">
+                    <span className="font-mono text-accent">
                       {winner === 'red' ? '2' : winner === 'tie' ? '1' : '0'} Win RP +{' '}
                       {redTotal >= 50 ? '1 Melody RP' : '0 RP'} +{' '}
                       {redRobot.climbed ? '1 Ensemble RP' : '0 RP'}
@@ -1432,7 +1419,7 @@ function TeamSelectDropdown({
                 className="w-full flex items-center justify-between p-1.5 rounded hover:bg-surface-hover text-xs text-left transition-colors"
               >
                 <div className="flex items-center gap-2 truncate">
-                  <span className="font-mono font-bold text-integra-yellow">#{t.number}</span>
+                  <span className="font-mono font-bold text-accent">#{t.number}</span>
                   <span className="text-text-main truncate">{t.name}</span>
                 </div>
                 <span className="text-[10px] text-text-muted font-mono">{t.score} pts</span>
@@ -1443,6 +1430,40 @@ function TeamSelectDropdown({
       )}
     </div>
   );
+}
+
+// Fills the six field slots with distinct robots: requested captains first, then preferred
+// team numbers, then the best-ranked team not yet on the field. Falling back to fixed list
+// indexes used to put the same robot on both alliances whenever the list order changed.
+function buildDefaultLineup(teamA?: Team | null, teamB?: Team | null) {
+  const used = new Set<number>();
+  const take = (...candidates: Array<Team | number | null | undefined>): Team => {
+    for (const c of candidates) {
+      const team = typeof c === 'number' ? mockTeams.find((t) => t.number === c) : c;
+      if (team && !used.has(team.number)) {
+        used.add(team.number);
+        return team;
+      }
+    }
+    const next = mockTeams.find((t) => !used.has(t.number))!;
+    used.add(next.number);
+    return next;
+  };
+
+  const blueCaptain = take(teamA, 3646);
+  // Reserve an explicitly requested red captain before blue's default picks can claim it.
+  const requestedRed = teamB && teamB.number !== blueCaptain.number ? take(teamB) : null;
+  const bluePick1 = take(1678, 6328);
+  const bluePick2 = take(498, 118);
+  const redCaptain = requestedRed ?? take(254, 4253);
+  return {
+    blueCaptain,
+    bluePick1,
+    bluePick2,
+    redCaptain,
+    redPick1: take(118, 6328),
+    redPick2: take(6328, 2096),
+  };
 }
 
 function createInitialFieldNotes(): FieldNote[] {

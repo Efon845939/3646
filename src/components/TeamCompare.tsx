@@ -122,7 +122,7 @@ export function TeamCompare({
                   <span className="text-xs font-bold uppercase text-text-main truncate">
                     {team.name}
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-400">
+                  <span className="text-[10px] font-mono text-text-muted">
                     Rank #{team.rank} • {team.tier}
                   </span>
                 </div>
@@ -132,28 +132,28 @@ export function TeamCompare({
               <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-border-main/60 text-xs">
                 <div className="p-2 bg-surface rounded border border-border-main/50">
                   <span className="text-[9px] uppercase font-bold text-text-muted block">Scout Score</span>
-                  <span className="text-lg font-black font-montserrat text-integra-yellow">
+                  <span className="text-lg font-black font-montserrat text-accent">
                     {team.score}
                   </span>
                 </div>
 
                 <div className="p-2 bg-surface rounded border border-border-main/50">
                   <span className="text-[9px] uppercase font-bold text-text-muted block">Statbotics EPA</span>
-                  <span className="text-lg font-mono font-bold text-white">
+                  <span className="text-lg font-mono font-bold text-text-main">
                     {stats.epa.total}
                   </span>
                 </div>
 
                 <div className="p-2 bg-surface rounded border border-border-main/50">
                   <span className="text-[9px] uppercase font-bold text-text-muted block">OPR / DPR</span>
-                  <span className="text-xs font-mono font-bold text-zinc-100">
+                  <span className="text-xs font-mono font-bold text-text-main">
                     {stats.opr} / {stats.dpr}
                   </span>
                 </div>
 
                 <div className="p-2 bg-surface rounded border border-border-main/50">
                   <span className="text-[9px] uppercase font-bold text-text-muted block">Win Rate</span>
-                  <span className="text-xs font-mono font-bold text-integra-yellow">
+                  <span className="text-xs font-mono font-bold text-accent">
                     {stats.record.winRate}% ({stats.record.wins}W-{stats.record.losses}L)
                   </span>
                 </div>
@@ -161,13 +161,13 @@ export function TeamCompare({
 
               {/* Specs */}
               <div className="mt-3 p-2 bg-surface rounded border border-border-main/50 text-[10px] space-y-1">
-                <div className="text-zinc-300 font-mono truncate">
+                <div className="text-text-main/80 font-mono truncate">
                   <span className="text-text-muted">Drive:</span> {stats.specs.drivetrain}
                 </div>
-                <div className="text-zinc-300 font-mono truncate">
+                <div className="text-text-main/80 font-mono truncate">
                   <span className="text-text-muted">Motors:</span> {stats.specs.driveMotors}
                 </div>
-                <div className="text-zinc-300 font-mono truncate">
+                <div className="text-text-main/80 font-mono truncate">
                   <span className="text-text-muted">Climb:</span> {stats.cycles.climbType} ({stats.cycles.climbSuccessPct}%)
                 </div>
               </div>
@@ -203,7 +203,7 @@ export function TeamCompare({
                       }}
                       className="w-full text-left px-3 py-2 hover:bg-surface-hover text-xs text-text-main border-b border-border-main last:border-b-0 flex items-center justify-between"
                     >
-                      <span className="font-bold text-integra-yellow font-mono">#{t.number}</span>
+                      <span className="font-bold text-accent font-mono">#{t.number}</span>
                       <span className="truncate max-w-[130px]">{t.name}</span>
                     </button>
                   ))}

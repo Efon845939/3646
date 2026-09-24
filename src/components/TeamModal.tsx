@@ -26,8 +26,13 @@ import {
   Gauge,
   Percent,
   Award,
+  ListOrdered,
 } from 'lucide-react';
 import { Team, mockTeams, getStatFullName, getEnhancedTeamStats } from '../data';
+import { MatchupIntelPanel } from './MatchupIntelPanel';
+import { PICKLIST_LANES, PICKLIST_LANE_META, PicklistLane } from '../hooks/usePicklist';
+import { HOST_TEAM_NUMBER } from '../utils/quickFilters';
+import { readScoutNotes, removeStorage, scoutNotesKey, writeStorage } from '../utils/storage';
 import {
   Radar,
   RadarChart,
@@ -50,6 +55,8 @@ interface TeamModalProps {
   isSelectedForCompare?: boolean;
   onToggleCompare?: (team: Team) => void;
   onOpenSimulator?: (team: Team) => void;
+  picklistLane?: PicklistLane | null;
+  onSetPicklistLane?: (team: Team, lane: PicklistLane | null) => void;
 }
 
 export function TeamModal({
@@ -58,29 +65,25 @@ export function TeamModal({
   isSelectedForCompare = false,
   onToggleCompare,
   onOpenSimulator,
+  picklistLane = null,
+  onSetPicklistLane,
 }: TeamModalProps) {
   const [activeTab, setActiveTab] = useState<'analytics' | 'specs' | 'tactics'>('analytics');
-  const [notes, setNotes] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(`scout_notes_${team.number}`) || '';
-    }
-    return '';
-  });
+  const [notes, setNotes] = useState<string>(() => readScoutNotes(team.number));
   const [savedStatus, setSavedStatus] = useState(false);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const frcStats = team.frcStats || getEnhancedTeamStats(team);
 
   useEffect(() => {
-    const storedNotes = localStorage.getItem(`scout_notes_${team.number}`) || '';
-    setNotes(storedNotes);
+    setNotes(readScoutNotes(team.number));
     setSavedStatus(false);
   }, [team.number]);
 
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const nextVal = e.target.value;
     setNotes(nextVal);
-    localStorage.setItem(`scout_notes_${team.number}`, nextVal);
+    writeStorage(scoutNotesKey(team.number), nextVal);
     setSavedStatus(true);
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -92,7 +95,7 @@ export function TeamModal({
 
   const handleClearNotes = () => {
     setNotes('');
-    localStorage.removeItem(`scout_notes_${team.number}`);
+    removeStorage(scoutNotesKey(team.number));
     setSavedStatus(false);
   };
 
@@ -104,17 +107,14 @@ export function TeamModal({
     };
   }, []);
 
+  // Escape is handled by useGlobalShortcuts, which closes one layer at a time. A second
+  // listener here used to close this modal too when Esc was meant for the shortcuts guide.
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEsc);
     document.body.style.overflow = 'hidden';
     return () => {
-      window.removeEventListener('keydown', handleEsc);
       document.body.style.overflow = 'unset';
     };
-  }, [onClose]);
+  }, []);
 
   const [chartViewMode, setChartViewMode] = useState<'trend' | 'deviation'>('trend');
 
@@ -260,7 +260,7 @@ export function TeamModal({
                 <h2 className="text-xl font-bold font-montserrat uppercase text-text-main">
                   {team.name}
                 </h2>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-integra-yellow/20 text-integra-yellow font-bold uppercase tracking-wider border border-integra-yellow/30 font-mono">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-integra-yellow/20 text-accent font-bold uppercase tracking-wider border border-integra-yellow/30 font-mono">
                   {team.tier} Tier
                 </span>
                 <span className="text-xs text-text-muted font-mono font-semibold">
@@ -274,7 +274,7 @@ export function TeamModal({
                     href={team.website}
                     target="_blank"
                     rel="noreferrer"
-                    className="hover:text-integra-yellow flex items-center gap-1 transition-colors"
+                    className="hover:text-accent flex items-center gap-1 transition-colors"
                   >
                     <Globe className="w-3.5 h-3.5" />
                     <span>Website</span>
@@ -296,7 +296,36 @@ export function TeamModal({
           </div>
 
           {/* Action Bar */}
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+            {onSetPicklistLane && team.number !== HOST_TEAM_NUMBER && (
+              <div
+                className="inline-flex items-center rounded-lg border border-border-main bg-surface p-0.5 text-[10px] font-bold uppercase"
+                role="group"
+                aria-label="Picklist lane"
+              >
+                <ListOrdered className="w-3.5 h-3.5 text-accent mx-1.5" aria-hidden="true" />
+                {PICKLIST_LANES.map((lane) => {
+                  const isActive = picklistLane === lane;
+                  return (
+                    <button
+                      key={lane}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => onSetPicklistLane(team, isActive ? null : lane)}
+                      className={`px-2 py-1 rounded-md border transition-colors ${
+                        isActive
+                          ? PICKLIST_LANE_META[lane].badgeClass
+                          : 'border-transparent text-text-muted hover:text-text-main'
+                      }`}
+                      title={isActive ? 'Remove from picklist' : `Add to ${PICKLIST_LANE_META[lane].label}`}
+                    >
+                      {PICKLIST_LANE_META[lane].short}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {onOpenSimulator && (
               <button
                 type="button"
@@ -304,9 +333,9 @@ export function TeamModal({
                   onOpenSimulator(team);
                   onClose();
                 }}
-                className="px-3 py-1.5 rounded-lg bg-surface hover:bg-surface-hover border border-integra-yellow/50 text-integra-yellow text-xs font-bold uppercase flex items-center gap-1.5 transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-surface hover:bg-surface-hover border border-integra-yellow/50 text-accent text-xs font-bold uppercase flex items-center gap-1.5 transition-colors"
               >
-                <Swords className="w-4 h-4 text-integra-yellow" />
+                <Swords className="w-4 h-4 text-accent" />
                 <span>Simulate</span>
               </button>
             )}
@@ -346,7 +375,7 @@ export function TeamModal({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-2 px-5 py-2.5 bg-bg-dark border-b border-border-main text-xs font-bold uppercase tracking-wider">
+        <div className="flex items-center gap-2 px-5 py-2.5 bg-bg-dark border-b border-border-main text-xs font-bold uppercase tracking-wider overflow-x-auto whitespace-nowrap">
           <button
             type="button"
             onClick={() => setActiveTab('analytics')}
@@ -392,58 +421,58 @@ export function TeamModal({
               {/* Statbotics & TBA Key Metrics Overview Grid */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-3 flex items-center gap-1.5">
-                  <Gauge className="w-4 h-4 text-integra-yellow" />
+                  <Gauge className="w-4 h-4 text-accent" />
                   <span>Statbotics EPA & Power Rating Telemetry</span>
                 </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                   <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
                     <span className="text-[9px] uppercase font-bold text-text-muted">Total EPA</span>
-                    <div className="text-xl font-mono font-black text-integra-yellow mt-1">
+                    <div className="text-xl font-mono font-black text-accent mt-1">
                       {frcStats.epa.total}
                     </div>
-                    <span className="text-[9px] text-zinc-400 font-mono">
+                    <span className="text-[9px] text-text-muted font-mono">
                       Top {100 - frcStats.epa.percentile}% (Rank #{frcStats.seasonRank.worldRank})
                     </span>
                   </div>
 
                   <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
                     <span className="text-[9px] uppercase font-bold text-text-muted">Auto EPA</span>
-                    <div className="text-xl font-mono font-bold text-zinc-100 mt-1">
+                    <div className="text-xl font-mono font-bold text-text-main mt-1">
                       {frcStats.epa.auto}
                     </div>
-                    <span className="text-[9px] text-zinc-400 font-mono">Autonomous phase</span>
+                    <span className="text-[9px] text-text-muted font-mono">Autonomous phase</span>
                   </div>
 
                   <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
                     <span className="text-[9px] uppercase font-bold text-text-muted">Teleop EPA</span>
-                    <div className="text-xl font-mono font-bold text-zinc-200 mt-1">
+                    <div className="text-xl font-mono font-bold text-text-main mt-1">
                       {frcStats.epa.teleop}
                     </div>
-                    <span className="text-[9px] text-zinc-400 font-mono">Driver control cycles</span>
+                    <span className="text-[9px] text-text-muted font-mono">Driver control cycles</span>
                   </div>
 
                   <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
                     <span className="text-[9px] uppercase font-bold text-text-muted">Endgame EPA</span>
-                    <div className="text-xl font-mono font-bold text-zinc-300 mt-1">
+                    <div className="text-xl font-mono font-bold text-text-main/80 mt-1">
                       {frcStats.epa.endgame}
                     </div>
-                    <span className="text-[9px] text-zinc-400 font-mono">Stage & climb points</span>
+                    <span className="text-[9px] text-text-muted font-mono">Stage & climb points</span>
                   </div>
 
                   <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
                     <span className="text-[9px] uppercase font-bold text-text-muted">OPR / DPR</span>
-                    <div className="text-xl font-mono font-bold text-zinc-100 mt-1">
+                    <div className="text-xl font-mono font-bold text-text-main mt-1">
                       {frcStats.opr} <span className="text-xs text-text-muted">/ {frcStats.dpr}</span>
                     </div>
-                    <span className="text-[9px] text-zinc-400 font-mono">CCWM: {frcStats.ccwm}</span>
+                    <span className="text-[9px] text-text-muted font-mono">CCWM: {frcStats.ccwm}</span>
                   </div>
 
                   <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
                     <span className="text-[9px] uppercase font-bold text-text-muted">Match Record</span>
-                    <div className="text-xl font-mono font-bold text-integra-yellow mt-1">
+                    <div className="text-xl font-mono font-bold text-accent mt-1">
                       {frcStats.record.winRate}%
                     </div>
-                    <span className="text-[9px] text-zinc-400 font-mono">
+                    <span className="text-[9px] text-text-muted font-mono">
                       {frcStats.record.wins}W - {frcStats.record.losses}L {frcStats.record.ties > 0 ? `(${frcStats.record.ties}T)` : ''}
                     </span>
                   </div>
@@ -606,7 +635,7 @@ export function TeamModal({
               {/* Hardware & Mechanical Specifications */}
               <div className="bg-bg-dark rounded-xl border border-border-main p-5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-integra-yellow" />
+                  <Cpu className="w-4 h-4 text-accent" />
                   <span>Drivetrain, Vision & Hardware Pit Data</span>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
@@ -655,7 +684,7 @@ export function TeamModal({
                       key={idx}
                       className="p-3 rounded-lg bg-surface border border-border-main flex items-start gap-2.5"
                     >
-                      <span className="w-5 h-5 rounded-full bg-integra-yellow/20 text-integra-yellow text-xs font-mono font-bold flex items-center justify-center shrink-0">
+                      <span className="w-5 h-5 rounded-full bg-integra-yellow/20 text-accent text-xs font-mono font-bold flex items-center justify-center shrink-0">
                         {idx + 1}
                       </span>
                       <span className="font-semibold text-text-main text-xs">{routine}</span>
@@ -669,10 +698,10 @@ export function TeamModal({
                 <div className="bg-bg-dark rounded-xl border border-border-main p-5">
                   <div className="flex items-center justify-between border-b border-border-main pb-2 mb-3">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-text-main flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-integra-yellow" />
+                      <Trophy className="w-4 h-4 text-accent" />
                       <span>Resmi FIRST & The Blue Alliance Ödül Geçmişi</span>
                     </h3>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-integra-yellow/20 text-integra-yellow font-bold font-mono">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-integra-yellow/20 text-accent font-bold font-mono">
                       {team.awards.length} Ödül
                     </span>
                   </div>
@@ -682,8 +711,8 @@ export function TeamModal({
                         key={i}
                         className="p-2 rounded-lg bg-surface border border-border-main text-xs flex items-start gap-2"
                       >
-                        <Trophy className="w-3.5 h-3.5 text-integra-yellow shrink-0 mt-0.5" />
-                        <span className="text-zinc-300 font-medium leading-snug">{award}</span>
+                        <Trophy className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
+                        <span className="text-text-main/80 font-medium leading-snug">{award}</span>
                       </div>
                     ))}
                   </div>
@@ -694,6 +723,8 @@ export function TeamModal({
 
           {activeTab === 'tactics' && (
             <div className="space-y-6">
+              <MatchupIntelPanel team={team} />
+
               {/* Tactical Strengths & Counter-Play */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-bg-dark rounded-xl border border-border-main p-5">
@@ -750,14 +781,14 @@ export function TeamModal({
                       High-Priority Alliance Candidate
                     </span>
                   ) : (
-                    <span className="px-2.5 py-1 rounded bg-zinc-700/30 text-zinc-300 border border-zinc-700 text-xs font-bold uppercase">
+                    <span className="px-2.5 py-1 rounded bg-zinc-700/30 text-text-main/80 border border-zinc-700 text-xs font-bold uppercase">
                       Secondary Pick Option
                     </span>
                   )}
                 </div>
 
                 <div className="p-3 bg-surface rounded-lg border border-border-main">
-                  <span className="text-[10px] uppercase font-bold text-integra-yellow block mb-1">
+                  <span className="text-[10px] uppercase font-bold text-accent block mb-1">
                     Tactical Counter-Play & Recommendation
                   </span>
                   <p className="text-xs text-text-main leading-relaxed">{team.counterPlay}</p>
@@ -775,7 +806,7 @@ export function TeamModal({
               <div className="bg-bg-dark rounded-xl border border-border-main p-5">
                 <div className="flex items-center justify-between mb-3 border-b border-border-main pb-2">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-integra-yellow" />
+                    <FileText className="w-4 h-4 text-accent" />
                     <span>Scout Notes & Pit Observations</span>
                   </h3>
                   {savedStatus && (

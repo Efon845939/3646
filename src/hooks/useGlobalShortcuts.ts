@@ -1,23 +1,26 @@
-import { useEffect, RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, RefObject } from 'react';
+import { QUICK_FILTERS, QuickFilterId } from '../utils/quickFilters';
+
+// A single view value makes "compare and simulator open at once" unrepresentable.
+export type AppView = 'dashboard' | 'compare' | 'simulator' | 'picklist';
 
 interface UseGlobalShortcutsOptions {
   searchInputRef: RefObject<HTMLInputElement | null>;
   isShortcutsOpen: boolean;
   setIsShortcutsOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
-  selectedTeamNumber: number | null;
+  isTeamModalOpen: boolean;
   onCloseTeamModal: () => void;
-  isCompareMode: boolean;
-  setIsCompareMode: (mode: boolean | ((prev: boolean) => boolean)) => void;
-  isSimulatorMode: boolean;
-  setIsSimulatorMode: (mode: boolean | ((prev: boolean) => boolean)) => void;
+  activeView: AppView;
+  onToggleView: (view: Exclude<AppView, 'dashboard'>) => void;
+  onCloseView: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   toggleTheme: () => void;
   exportToCSV: () => void;
-  onToggleViewMode?: () => void;
-  onSelectSort?: (sort: 'score-desc' | 'score-asc') => void;
-  onToggleFilterTag?: (tag: 'Impact Winner' | 'Most Creative' | 'High Threat' | 'Best Branding') => void;
-  onResetFilters?: () => void;
+  onToggleViewMode: () => void;
+  onSelectSort: (sort: 'score-desc' | 'score-asc') => void;
+  onToggleQuickFilter: (id: QuickFilterId) => void;
+  onResetFilters: () => void;
 }
 
 export function isTypingInInput(target: EventTarget | null): boolean {
@@ -26,201 +29,100 @@ export function isTypingInInput(target: EventTarget | null): boolean {
   if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
     return true;
   }
-  if (target.isContentEditable) {
-    return true;
-  }
-  return false;
+  return target.isContentEditable;
 }
 
-export function useGlobalShortcuts({
-  searchInputRef,
-  isShortcutsOpen,
-  setIsShortcutsOpen,
-  selectedTeamNumber,
-  onCloseTeamModal,
-  isCompareMode,
-  setIsCompareMode,
-  isSimulatorMode,
-  setIsSimulatorMode,
-  searchQuery,
-  setSearchQuery,
-  toggleTheme,
-  exportToCSV,
-  onToggleViewMode,
-  onSelectSort,
-  onToggleFilterTag,
-  onResetFilters,
-}: UseGlobalShortcutsOptions) {
+const VIEW_KEYS: Record<string, Exclude<AppView, 'dashboard'>> = {
+  c: 'compare',
+  m: 'simulator',
+  p: 'picklist',
+};
+
+export function useGlobalShortcuts(options: UseGlobalShortcutsOptions) {
+  // The listener is attached once and always reads the latest options through this ref,
+  // instead of being torn down and re-attached on every render.
+  const optionsRef = useRef(options);
+  useLayoutEffect(() => {
+    optionsRef.current = options;
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore meta/ctrl/alt key combinations (e.g. Cmd+C, Cmd+R, Ctrl+Shift+I)
-      if (e.metaKey || e.ctrlKey || e.altKey) {
-        return;
-      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
 
+      const o = optionsRef.current;
       const isInput = isTypingInInput(e.target);
+      const key = e.key.toLowerCase();
 
-      // 1. ESCAPE: Handle hierarchically
+      // ESCAPE closes exactly one layer, innermost first.
       if (e.key === 'Escape') {
-        if (isShortcutsOpen) {
+        if (o.isShortcutsOpen) {
           e.preventDefault();
-          setIsShortcutsOpen(false);
-          return;
-        }
-
-        if (selectedTeamNumber !== null) {
+          o.setIsShortcutsOpen(false);
+        } else if (o.isTeamModalOpen) {
           e.preventDefault();
-          onCloseTeamModal();
-          return;
-        }
-
-        if (isCompareMode) {
+          o.onCloseTeamModal();
+        } else if (o.activeView !== 'dashboard') {
           e.preventDefault();
-          setIsCompareMode(false);
-          return;
-        }
-
-        if (isSimulatorMode) {
+          o.onCloseView();
+        } else if (o.searchQuery.trim() !== '') {
           e.preventDefault();
-          setIsSimulatorMode(false);
-          return;
-        }
-
-        if (searchQuery.trim() !== '') {
-          e.preventDefault();
-          setSearchQuery('');
-          return;
-        }
-
-        if (isInput && searchInputRef.current) {
-          searchInputRef.current.blur();
-          return;
+          o.setSearchQuery('');
+        } else if (isInput && o.searchInputRef.current) {
+          o.searchInputRef.current.blur();
         }
         return;
       }
 
-      // If user is currently typing in an input, do not trigger single-key action shortcuts
-      if (isInput) {
+      if (isInput) return;
+
+      if (e.key === '?' || key === 'h') {
+        e.preventDefault();
+        o.setIsShortcutsOpen((prev) => !prev);
         return;
       }
 
-      // 2. SEARCH FOCUS: '/'
+      // While a modal is on screen, keys must not change the page hidden behind it.
+      if (o.isShortcutsOpen || o.isTeamModalOpen) return;
+
       if (e.key === '/') {
         e.preventDefault();
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-          searchInputRef.current.select();
-        }
+        o.searchInputRef.current?.focus();
+        o.searchInputRef.current?.select();
         return;
       }
 
-      // 3. SHORTCUTS HELP: '?' or 'h'
-      if (e.key === '?' || e.key.toLowerCase() === 'h') {
+      const view = VIEW_KEYS[key];
+      if (view) {
         e.preventDefault();
-        setIsShortcutsOpen((prev) => !prev);
+        o.onToggleView(view);
         return;
       }
 
-      // 4. COMPARE MODE: 'c'
-      if (e.key.toLowerCase() === 'c') {
+      const quickFilter = QUICK_FILTERS.find((f) => f.shortcut === e.key);
+      if (quickFilter) {
         e.preventDefault();
-        setIsCompareMode((prev) => !prev);
-        setIsSimulatorMode(false);
+        o.onToggleQuickFilter(quickFilter.id);
         return;
       }
 
-      // 5. SIMULATOR: 'm'
-      if (e.key.toLowerCase() === 'm') {
+      const actions: Record<string, () => void> = {
+        v: o.onToggleViewMode,
+        t: o.toggleTheme,
+        e: o.exportToCSV,
+        '1': () => o.onSelectSort('score-desc'),
+        '2': () => o.onSelectSort('score-asc'),
+        '0': o.onResetFilters,
+      };
+      const action = actions[key];
+      if (action) {
         e.preventDefault();
-        setIsSimulatorMode((prev) => !prev);
-        setIsCompareMode(false);
-        return;
-      }
-
-      // 6. VIEW MODE TOGGLE: 'v'
-      if (e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        onToggleViewMode?.();
-        return;
-      }
-
-      // 7. THEME TOGGLE: 't'
-      if (e.key.toLowerCase() === 't') {
-        e.preventDefault();
-        toggleTheme();
-        return;
-      }
-
-      // 8. EXPORT CSV: 'e'
-      if (e.key.toLowerCase() === 'e') {
-        e.preventDefault();
-        exportToCSV();
-        return;
-      }
-
-      // 9. QUICK SORTS & FILTERS: Number keys 1-6 and 0
-      if (e.key === '1') {
-        e.preventDefault();
-        onSelectSort?.('score-desc');
-        return;
-      }
-
-      if (e.key === '2') {
-        e.preventDefault();
-        onSelectSort?.('score-asc');
-        return;
-      }
-
-      if (e.key === '3') {
-        e.preventDefault();
-        onToggleFilterTag?.('Impact Winner');
-        return;
-      }
-
-      if (e.key === '4') {
-        e.preventDefault();
-        onToggleFilterTag?.('High Threat');
-        return;
-      }
-
-      if (e.key === '5') {
-        e.preventDefault();
-        onToggleFilterTag?.('Most Creative');
-        return;
-      }
-
-      if (e.key === '6') {
-        e.preventDefault();
-        onToggleFilterTag?.('Best Branding');
-        return;
-      }
-
-      if (e.key === '0') {
-        e.preventDefault();
-        onResetFilters?.();
-        return;
+        action();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    searchInputRef,
-    isShortcutsOpen,
-    setIsShortcutsOpen,
-    selectedTeamNumber,
-    onCloseTeamModal,
-    isCompareMode,
-    setIsCompareMode,
-    isSimulatorMode,
-    setIsSimulatorMode,
-    searchQuery,
-    setSearchQuery,
-    toggleTheme,
-    exportToCSV,
-    onToggleViewMode,
-    onSelectSort,
-    onToggleFilterTag,
-    onResetFilters,
-  ]);
+  }, []);
 }

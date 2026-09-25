@@ -193,7 +193,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-bg-dark text-text-main font-inter pb-20 transition-colors duration-300">
       {/* Navigation Header */}
-      <nav className="flex flex-col lg:flex-row justify-between items-center py-3.5 border-b border-border-main mb-6 px-4 sm:px-6 bg-bg-dark/95 backdrop-blur-md sticky top-0 z-40 transition-colors duration-300 shadow-sm">
+      <nav className="flex flex-col lg:flex-row justify-between items-center py-3.5 border-b border-border-main mb-6 px-4 sm:px-6 lg:px-10 bg-bg-dark/95 backdrop-blur-md sticky top-0 z-40 transition-colors duration-300 shadow-sm">
         <button
           type="button"
           onClick={() => {
@@ -301,7 +301,7 @@ export default function App() {
             id="nav-btn-shortcuts-help"
             onClick={() => setIsShortcutsOpen(true)}
             aria-keyshortcuts="?"
-            className="p-2 rounded-lg border border-border-main bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main transition-colors flex items-center justify-center gap-1"
+            className="p-2 rounded-lg border border-border-main bg-surface hover:bg-surface-hover text-text-muted hover:text-text-main transition-colors hidden sm:flex items-center justify-center gap-1"
             title="Keyboard Shortcuts (Shortcut: ?)"
           >
             <Keyboard className="w-4 h-4 text-accent" />
@@ -351,7 +351,8 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-2">
+      {/* Full width: the page fills the screen instead of leaving empty bands on wide monitors. */}
+      <main className="w-full px-4 sm:px-6 lg:px-10 py-2">
         {activeView === 'simulator' ? (
           <Suspense fallback={<ViewLoader label="Loading match simulator…" />}>
             <MatchSimulator
@@ -456,7 +457,10 @@ export default function App() {
             {/* Main Teams Presentation: Grid View vs Table View */}
             {filteredAndSortedTeams.length > 0 ? (
               viewMode === 'grid' ? (
-                <motion.div layout className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
+                <motion.div
+                  layout
+                  className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 min-[2400px]:grid-cols-4 gap-6"
+                >
                   {filteredAndSortedTeams.map((team, idx) => (
                     <motion.div
                       layout
@@ -540,22 +544,7 @@ export default function App() {
         />
       )}
 
-      {/* Floating Keyboard Shortcuts Guide Trigger (Bottom Left) */}
-      <button
-        id="btn-floating-shortcuts-guide"
-        onClick={() => setIsShortcutsOpen(true)}
-        aria-keyshortcuts="?"
-        className="fixed bottom-6 left-6 z-40 hidden sm:flex items-center gap-2 px-3 py-2 rounded-full bg-surface/90 hover:bg-surface backdrop-blur-md border border-border-main hover:border-integra-yellow/60 text-text-muted hover:text-text-main shadow-lg transition-all text-xs group"
-        title="Keyboard Shortcuts Guide (Shortcut: ?)"
-      >
-        <Keyboard className="w-4 h-4 text-accent group-hover:scale-110 transition-transform" />
-        <span className="font-medium">Shortcuts</span>
-        <kbd className="px-1.5 py-0.5 text-xs font-mono rounded bg-bg-dark border border-border-main text-text-muted group-hover:text-accent">
-          ?
-        </kbd>
-      </button>
-
-      {/* Global Keyboard Shortcuts Help Modal */}
+      {/* Global Keyboard Shortcuts Help Modal (opened from the header button or "?") */}
       <KeyboardShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
     </div>
   );

@@ -21,6 +21,23 @@
   --accent-text: #FEDE00;
 }
 
+/* Tailwind sizes are in rem, so the root size scales text, spacing and controls together.
+   Desktop monitors get a larger base so the dashboard stays readable from a distance.
+   (Breakpoints are unaffected: media queries always use the browser's default 16px.) */
+html {
+  font-size: 100%;
+}
+@media (min-width: 1280px) {
+  html {
+    font-size: 106.25%; /* 17px */
+  }
+}
+@media (min-width: 1600px) {
+  html {
+    font-size: 112.5%; /* 18px */
+  }
+}
+
 body {
   background-color: var(--bg-main);
   color: var(--text-main);

@@ -22,8 +22,10 @@ interface HexRadarProps {
   showLabels?: boolean;
 }
 
-const RADIUS = 62;
-const LABEL_RADIUS = RADIUS + 13;
+const RADIUS = 70;
+const LABEL_RADIUS = RADIUS + 12;
+// Wide enough for a side label plus its value ("OPR 100") at the 14-unit label size.
+export const HEX_RADAR_VIEWBOX = { x: -150, y: -100, width: 300, height: 200 };
 const GRID_LEVELS = [0.2, 0.4, 0.6, 0.8, 1];
 
 // Axis i points at -90° + i·(360°/n), so the first axis is straight up and the rest
@@ -46,7 +48,8 @@ export function HexRadar({ axes, series, max = 100, className = '', showLabels =
   const primary = series[0];
 
   const summary = axes.map((a, i) => `${a.fullName} ${primary?.values[i] ?? 0}`).join(', ');
-  const viewBox = showLabels ? '-140 -92 280 184' : '-66 -66 132 132';
+  const { x: vx, y: vy, width: vw, height: vh } = HEX_RADAR_VIEWBOX;
+  const viewBox = showLabels ? `${vx} ${vy} ${vw} ${vh}` : '-74 -74 148 148';
 
   return (
     <svg viewBox={viewBox} className={`w-full h-full select-none ${className}`} role="img" aria-label={summary}>
@@ -92,17 +95,17 @@ export function HexRadar({ axes, series, max = 100, className = '', showLabels =
         const [x, y] = polar(i, n, (Math.max(0, Math.min(max, v)) / max) * RADIUS);
         return (
           <g key={axes[i].key} onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}>
-            <circle cx={x} cy={y} r={9} className="fill-transparent" />
-            <circle cx={x} cy={y} r={hovered === i ? 3.5 : 2.25} className={primary.dotClass} />
+            <circle cx={x} cy={y} r={11} className="fill-transparent" />
+            <circle cx={x} cy={y} r={hovered === i ? 4.5 : 3} className={primary.dotClass} />
           </g>
         );
       })}
 
-      {/* Axis labels: the short code by default, full name and value while hovered */}
+      {/* Axis labels: the short code, plus the value while hovered; full names are in <title>. */}
       {showLabels && axes.map((axis, i) => {
         const [x, y] = polar(i, n, LABEL_RADIUS);
         const anchor = x > 1 ? 'start' : x < -1 ? 'end' : 'middle';
-        const dy = y < -1 ? -2 : y > 1 ? 8 : 3;
+        const dy = y < -1 ? -4 : y > 1 ? 14 : 5;
         const isHovered = hovered === i;
         return (
           <text
@@ -113,11 +116,12 @@ export function HexRadar({ axes, series, max = 100, className = '', showLabels =
             textAnchor={anchor}
             onMouseEnter={() => setHovered(i)}
             onMouseLeave={() => setHovered(null)}
-            className={`font-montserrat cursor-default transition-colors ${
-              isHovered ? 'fill-accent text-[10px] font-extrabold' : 'fill-text-muted text-[9px] font-bold'
+            className={`font-montserrat cursor-default transition-colors text-[14px] ${
+              isHovered ? 'fill-accent font-extrabold' : 'fill-text-muted font-bold'
             }`}
           >
-            {isHovered ? `${axis.fullName} · ${primary?.values[i] ?? 0}` : axis.label}
+            <title>{`${axis.fullName}: ${primary?.values[i] ?? 0} / ${max}`}</title>
+            {isHovered ? `${axis.label} ${primary?.values[i] ?? 0}` : axis.label}
           </text>
         );
       })}

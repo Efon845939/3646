@@ -17,7 +17,7 @@ const STORAGE_KEY = 'integra_picklist_v1';
 const EMPTY: PicklistState = { first: [], second: [], dnp: [] };
 
 // Stored data is untrusted: drop unknown teams, the host team and duplicates across lanes.
-function sanitize(raw: unknown): PicklistState {
+export function sanitizePicklist(raw: unknown): PicklistState {
   const known = new Set(mockTeams.map((t) => t.number));
   const seen = new Set<number>();
   const result: PicklistState = { first: [], second: [], dnp: [] };
@@ -39,7 +39,7 @@ function loadPicklist(): PicklistState {
   const raw = readStorage(STORAGE_KEY);
   if (!raw) return EMPTY;
   try {
-    return sanitize(JSON.parse(raw));
+    return sanitizePicklist(JSON.parse(raw));
   } catch {
     return EMPTY;
   }

@@ -179,7 +179,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           <div className="p-5 max-h-[70vh] overflow-y-auto space-y-6">
             {/* Workflow Category */}
             <div>
-              <span className="text-[11px] font-black uppercase tracking-wider text-accent block mb-2.5 font-montserrat">
+              <span className="text-sm font-black uppercase tracking-wider text-accent block mb-2.5 font-montserrat">
                 Navigation & Views
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -211,7 +211,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
 
             {/* Filters Category */}
             <div>
-              <span className="text-[11px] font-black uppercase tracking-wider text-text-muted block mb-2.5 font-montserrat">
+              <span className="text-sm font-black uppercase tracking-wider text-text-muted block mb-2.5 font-montserrat">
                 Filters & Quick Sorts
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -243,7 +243,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
 
             {/* System Category */}
             <div>
-              <span className="text-[11px] font-black uppercase tracking-wider text-text-muted block mb-2.5 font-montserrat">
+              <span className="text-sm font-black uppercase tracking-wider text-text-muted block mb-2.5 font-montserrat">
                 System & Export
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -275,7 +275,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           </div>
 
           {/* Footer */}
-          <div className="p-3.5 bg-bg-dark border-t border-border-main flex items-center justify-between text-[11px] text-text-muted">
+          <div className="p-3.5 bg-bg-dark border-t border-border-main flex items-center justify-between text-sm text-text-muted">
             <span>Shortcuts are disabled while typing in notes or input fields</span>
             <span className="font-mono text-accent font-semibold">Press Esc to close</span>
           </div>

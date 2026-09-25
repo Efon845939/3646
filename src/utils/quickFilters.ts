@@ -1,9 +1,10 @@
-import { Award, Palette, ShieldAlert, Trophy, type LucideIcon } from 'lucide-react';
-import { Team, mockTeams } from '../data';
+import { Award, Medal, ShieldAlert, Trophy, type LucideIcon } from 'lucide-react';
+import { Team } from '../data';
+import { getRealMetrics } from './realMetrics';
 
 export const HOST_TEAM_NUMBER = 3646;
 
-export type QuickFilterId = 'impact' | 'threat' | 'finalist' | 'branding';
+export type QuickFilterId = 'impact' | 'threat' | 'finalist' | 'winners';
 
 export interface QuickFilter {
   id: QuickFilterId;
@@ -15,28 +16,27 @@ export interface QuickFilter {
   matches: (team: Team) => boolean;
 }
 
-const hostEPA = mockTeams.find((t) => t.number === HOST_TEAM_NUMBER)?.frcStats?.epa.total ?? 0;
-
-// Every chip is derived from fields the dataset actually has, so no filter can silently
-// return an empty list because a hand-written tag was never assigned to any team.
+// Every chip is derived from real TBA results (or the source ranking's own tags), so no filter
+// can silently return an empty list because a hand-written tag was never assigned.
+// Every team in this list won an Impact award in 2026, so "impact" looks at depth of record.
 export const QUICK_FILTERS: QuickFilter[] = [
   {
     id: 'impact',
-    label: 'Impact Winners',
+    label: 'Impact Veterans',
     shortcut: '3',
-    description: 'Impact Award winners and FIRST Hall of Fame teams',
+    description: "8 or more Impact / Chairman's Award wins across all seasons",
     icon: Trophy,
     iconClass: 'text-accent',
-    matches: (t) => t.tags.some((tag) => tag === 'Impact Winner' || tag.endsWith('HoF')),
+    matches: (t) => (getRealMetrics(t.number)?.impactWins ?? 0) >= 8,
   },
   {
     id: 'threat',
     label: 'High Threat',
     shortcut: '4',
-    description: `Rivals whose Total EPA is at or above #${HOST_TEAM_NUMBER} (${hostEPA})`,
+    description: 'Top 25% of this list by best 2026 event OPR',
     icon: ShieldAlert,
     iconClass: 'text-rose-400',
-    matches: (t) => t.number !== HOST_TEAM_NUMBER && (t.frcStats?.epa.total ?? 0) >= hostEPA,
+    matches: (t) => t.number !== HOST_TEAM_NUMBER && t.stats.opr >= 75,
   },
   {
     id: 'finalist',
@@ -48,13 +48,13 @@ export const QUICK_FILTERS: QuickFilter[] = [
     matches: (t) => t.tags.some((tag) => tag.includes('Finalist')),
   },
   {
-    id: 'branding',
-    label: 'Best Branding',
+    id: 'winners',
+    label: 'Event Winners',
     shortcut: '6',
-    description: 'Media & Branding (MED) rating of 85 or higher',
-    icon: Palette,
+    description: 'Won at least one 2026 event',
+    icon: Medal,
     iconClass: 'text-sky-400',
-    matches: (t) => t.stats.med >= 85,
+    matches: (t) => (getRealMetrics(t.number)?.eventWins2026 ?? 0) > 0,
   },
 ];
 

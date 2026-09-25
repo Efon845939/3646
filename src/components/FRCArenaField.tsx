@@ -54,14 +54,14 @@ export function FRCArenaField({
 
       {/* Blue Alliance Starting Line & Auto Boundary (White & Blue Gaffer Tape) */}
       <div className="absolute left-[24%] top-0 bottom-0 w-[2px] bg-blue-500/30 border-r border-dashed border-blue-400/70 pointer-events-none">
-        <span className="absolute top-2 left-1.5 text-[8px] font-mono font-bold text-blue-400/70 uppercase rotate-90 origin-left">
+        <span className="absolute top-2 left-1.5 text-[10px] font-mono font-bold text-blue-400/70 uppercase rotate-90 origin-left">
           BLUE AUTO LINE (5.8m)
         </span>
       </div>
 
       {/* Red Alliance Starting Line & Auto Boundary */}
       <div className="absolute right-[24%] top-0 bottom-0 w-[2px] bg-red-500/30 border-l border-dashed border-red-400/70 pointer-events-none">
-        <span className="absolute top-2 right-1.5 text-[8px] font-mono font-bold text-red-400/70 uppercase -rotate-90 origin-right">
+        <span className="absolute top-2 right-1.5 text-[10px] font-mono font-bold text-red-400/70 uppercase -rotate-90 origin-right">
           RED AUTO LINE (5.8m)
         </span>
       </div>
@@ -77,7 +77,7 @@ export function FRCArenaField({
       <div className="absolute left-4 top-3 w-24 sm:w-32 h-14 sm:h-16 bg-blue-950/80 border-2 border-blue-500/60 rounded-br-2xl p-2 flex flex-col justify-between shadow-[0_0_20px_rgba(37,99,235,0.25)] z-10 backdrop-blur-xs">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-blue-300 font-montserrat">
+            <span className="text-[11px] sm:text-[11px] font-black uppercase tracking-wider text-blue-300 font-montserrat">
               Blue Speaker
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping"></span>
@@ -88,23 +88,23 @@ export function FRCArenaField({
           </div>
         </div>
         <div className="flex items-baseline justify-between">
-          <span className="text-[11px] sm:text-xs font-mono font-black text-blue-300">
+          <span className="text-xs sm:text-xs font-mono font-black text-blue-300">
             {blueRobot.scoreBreakdown.autoNotes + blueRobot.scoreBreakdown.teleopSpeaker} pts
           </span>
-          <span className="text-[8px] font-bold text-blue-400/80 uppercase">Subwoofer</span>
+          <span className="text-[10px] font-bold text-blue-400/80 uppercase">Subwoofer</span>
         </div>
       </div>
 
       {/* BLUE AMP STATION (Top Wall at 27%) */}
       <div className="absolute left-[26%] top-1 w-16 sm:w-20 h-7 bg-blue-950/70 border border-blue-500/40 rounded-b-md p-1 flex items-center justify-between z-10">
-        <span className="text-[8px] font-bold text-blue-400 uppercase">Amp</span>
-        <span className="text-[9px] font-mono font-bold text-blue-300">{blueRobot.notesAmped}</span>
+        <span className="text-[10px] font-bold text-blue-400 uppercase">Amp</span>
+        <span className="text-[11px] font-mono font-bold text-blue-300">{blueRobot.notesAmped}</span>
       </div>
 
       {/* BLUE SOURCE / HUMAN PLAYER INTAKE (Bottom Left) */}
       <div className="absolute left-4 bottom-3 w-24 sm:w-28 h-10 bg-blue-950/60 border border-blue-500/40 rounded-tr-xl p-1.5 flex items-center justify-between z-10">
         <div className="flex flex-col">
-          <span className="text-[8px] font-black uppercase text-blue-400">Source Intake</span>
+          <span className="text-[10px] font-black uppercase text-blue-400">Source Intake</span>
           <span className="text-[7px] text-blue-300/70 font-mono">Chute Ready</span>
         </div>
         <div className="w-2.5 h-2.5 rounded-full border border-blue-400/80 bg-blue-500/40 animate-pulse"></div>
@@ -114,7 +114,7 @@ export function FRCArenaField({
       <div className="absolute right-4 top-3 w-24 sm:w-32 h-14 sm:h-16 bg-red-950/80 border-2 border-red-500/60 rounded-bl-2xl p-2 flex flex-col justify-between shadow-[0_0_20px_rgba(239,68,68,0.25)] z-10 backdrop-blur-xs text-right">
         <div className="flex items-center justify-between flex-row-reverse">
           <div className="flex items-center gap-1 flex-row-reverse">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-red-300 font-montserrat">
+            <span className="text-[11px] sm:text-[11px] font-black uppercase tracking-wider text-red-300 font-montserrat">
               Red Speaker
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping"></span>
@@ -125,23 +125,23 @@ export function FRCArenaField({
           </div>
         </div>
         <div className="flex items-baseline justify-between flex-row-reverse">
-          <span className="text-[11px] sm:text-xs font-mono font-black text-red-300">
+          <span className="text-xs sm:text-xs font-mono font-black text-red-300">
             {redRobot.scoreBreakdown.autoNotes + redRobot.scoreBreakdown.teleopSpeaker} pts
           </span>
-          <span className="text-[8px] font-bold text-red-400/80 uppercase">Subwoofer</span>
+          <span className="text-[10px] font-bold text-red-400/80 uppercase">Subwoofer</span>
         </div>
       </div>
 
       {/* RED AMP STATION (Top Wall at 73%) */}
       <div className="absolute right-[26%] top-1 w-16 sm:w-20 h-7 bg-red-950/70 border border-red-500/40 rounded-b-md p-1 flex items-center justify-between z-10">
-        <span className="text-[8px] font-bold text-red-400 uppercase">Amp</span>
-        <span className="text-[9px] font-mono font-bold text-red-300">{redRobot.notesAmped}</span>
+        <span className="text-[10px] font-bold text-red-400 uppercase">Amp</span>
+        <span className="text-[11px] font-mono font-bold text-red-300">{redRobot.notesAmped}</span>
       </div>
 
       {/* RED SOURCE / HUMAN PLAYER INTAKE (Bottom Right) */}
       <div className="absolute right-4 bottom-3 w-24 sm:w-28 h-10 bg-red-950/60 border border-red-500/40 rounded-tl-xl p-1.5 flex items-center justify-between z-10">
         <div className="flex flex-col text-left">
-          <span className="text-[8px] font-black uppercase text-red-400">Source Intake</span>
+          <span className="text-[10px] font-black uppercase text-red-400">Source Intake</span>
           <span className="text-[7px] text-red-300/70 font-mono">Chute Ready</span>
         </div>
         <div className="w-2.5 h-2.5 rounded-full border border-red-400/80 bg-red-500/40 animate-pulse"></div>
@@ -157,14 +157,14 @@ export function FRCArenaField({
           <div className="absolute inset-y-0 left-1/2 w-0.5 bg-zinc-400/80"></div>
         </div>
 
-        <span className="mt-2 text-[9px] sm:text-[10px] font-black uppercase font-montserrat tracking-widest text-zinc-300">
+        <span className="mt-2 text-[11px] sm:text-[11px] font-black uppercase font-montserrat tracking-widest text-zinc-300">
           Center Stage
         </span>
 
         {/* Live Climb Badges */}
         <div className="flex gap-2 mt-1">
           <span
-            className={`text-[8px] font-black px-2 py-0.5 rounded transition-all ${
+            className={`text-[10px] font-black px-2 py-0.5 rounded transition-all ${
               blueRobot.climbed
                 ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(37,99,235,0.8)] animate-pulse'
                 : 'bg-zinc-900 border border-zinc-700 text-zinc-500'
@@ -173,7 +173,7 @@ export function FRCArenaField({
             {blueRobot.climbed ? 'BLUE CLIMBED (+12)' : 'BLUE READY'}
           </span>
           <span
-            className={`text-[8px] font-black px-2 py-0.5 rounded transition-all ${
+            className={`text-[10px] font-black px-2 py-0.5 rounded transition-all ${
               redRobot.climbed
                 ? 'bg-red-600 text-white shadow-[0_0_10px_rgba(239,68,68,0.8)] animate-pulse'
                 : 'bg-zinc-900 border border-zinc-700 text-zinc-500'
@@ -324,7 +324,7 @@ export function FRCArenaField({
           {/* Bumper Perimeter (Blue Alliance #3646) */}
           <div className="w-full h-full bg-zinc-900 rounded-md border-4 border-blue-600 shadow-[0_0_20px_rgba(37,99,235,0.5)] flex flex-col items-center justify-center relative overflow-hidden">
             {/* Real Team Number On Bumper */}
-            <span className="font-montserrat font-black text-[10px] sm:text-[11px] text-white tracking-tighter leading-none select-none">
+            <span className="font-montserrat font-black text-[11px] sm:text-xs text-white tracking-tighter leading-none select-none">
               #{teamA.number}
             </span>
 
@@ -343,7 +343,7 @@ export function FRCArenaField({
         </div>
 
         {/* Dynamic Action & Speed Tag above robot */}
-        <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded bg-blue-950/90 border border-blue-500/50 text-[8px] font-bold text-blue-200 tracking-wide pointer-events-none shadow-md flex items-center gap-1">
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded bg-blue-950/90 border border-blue-500/50 text-[10px] font-bold text-blue-200 tracking-wide pointer-events-none shadow-md flex items-center gap-1">
           <span>{blueRobot.action}</span>
           <span className="font-mono text-blue-400">({blueRobot.speedMps.toFixed(1)} m/s)</span>
         </div>
@@ -397,7 +397,7 @@ export function FRCArenaField({
           {/* Bumper Perimeter (Red Alliance #1678) */}
           <div className="w-full h-full bg-zinc-900 rounded-md border-4 border-red-600 shadow-[0_0_20px_rgba(239,68,68,0.5)] flex flex-col items-center justify-center relative overflow-hidden">
             {/* Real Team Number On Bumper */}
-            <span className="font-montserrat font-black text-[10px] sm:text-[11px] text-white tracking-tighter leading-none select-none">
+            <span className="font-montserrat font-black text-[11px] sm:text-xs text-white tracking-tighter leading-none select-none">
               #{teamB.number}
             </span>
 
@@ -416,7 +416,7 @@ export function FRCArenaField({
         </div>
 
         {/* Dynamic Action & Speed Tag above robot */}
-        <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded bg-red-950/90 border border-red-500/50 text-[8px] font-bold text-red-200 tracking-wide pointer-events-none shadow-md flex items-center gap-1">
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap px-1.5 py-0.5 rounded bg-red-950/90 border border-red-500/50 text-[10px] font-bold text-red-200 tracking-wide pointer-events-none shadow-md flex items-center gap-1">
           <span>{redRobot.action}</span>
           <span className="font-mono text-red-400">({redRobot.speedMps.toFixed(1)} m/s)</span>
         </div>
@@ -448,7 +448,7 @@ export function FRCArenaField({
       </AnimatePresence>
 
       {/* Field Watermark & Dimensions scale */}
-      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[9px] font-mono font-bold text-zinc-500 pointer-events-none uppercase tracking-widest bg-black/40 px-2 py-0.5 rounded-full">
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[11px] font-mono font-bold text-zinc-500 pointer-events-none uppercase tracking-widest bg-black/40 px-2 py-0.5 rounded-full">
         <span>FRC Official Regulation Field (16.54m × 8.21m)</span>
         <span>•</span>
         <span className="text-zinc-400">{phase.toUpperCase()} PHASE</span>

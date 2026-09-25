@@ -1,6 +1,7 @@
 import { Team } from '../data';
 import { getEnhancedTeamStats } from './frcStatsData';
 import { epaWinPercent } from './winProbability';
+import { getRealMetrics, winRateOf } from './realMetrics';
 
 export interface TeamBehaviorProfile {
   teamNumber: number;
@@ -269,26 +270,26 @@ export function getTeamBehaviorProfile(team: Team): TeamBehaviorProfile {
     return KNOWN_TEAM_PROFILES[team.number];
   }
 
-  const tec = team.stats?.tec ?? 50;
+  const power = team.stats?.opr ?? 50; // real best-event OPR percentile
   const score = team.score ?? 70;
-  const isHighTech = tec >= 80 || score >= 90;
+  const isHighTech = power >= 80 || score >= 90;
   const isDefenseTagged = team.tags?.includes('High Threat') || (team.cons?.some((c) => c.toLowerCase().includes('defense')));
 
   let shootingStyle: TeamBehaviorProfile['shootingStyle'] = 'subwoofer';
-  if (tec >= 88) shootingStyle = 'turret_dynamic';
-  else if (tec >= 75) shootingStyle = 'podium';
+  if (power >= 88) shootingStyle = 'turret_dynamic';
+  else if (power >= 75) shootingStyle = 'podium';
   else if (team.tags?.includes('Most Creative')) shootingStyle = 'wing_sniper';
 
   let cycleRoute: TeamBehaviorProfile['cycleRoute'] = 'centerfield';
-  if (tec >= 85) cycleRoute = 'trench';
+  if (power >= 85) cycleRoute = 'trench';
   else if (isDefenseTagged) cycleRoute = 'centerfield';
   else cycleRoute = 'wall_chute';
 
-  const autoNoteCount = tec >= 90 ? 4 : tec >= 70 ? 3 : 2;
-  const autoPathStyle = tec >= 85 ? 'centerline_rush' : tec >= 65 ? 'wing_clear' : 'safe_leave';
+  const autoNoteCount = power >= 90 ? 4 : power >= 70 ? 3 : 2;
+  const autoPathStyle = power >= 85 ? 'centerline_rush' : power >= 65 ? 'wing_clear' : 'safe_leave';
 
-  const defenseTendency = isDefenseTagged ? 55 : tec > 85 ? 18 : 35;
-  const cycleDurationBase = Math.max(7.8, 14.2 - (tec / 100) * 5.0 - (score / 100) * 1.5);
+  const defenseTendency = isDefenseTagged ? 55 : power > 85 ? 18 : 35;
+  const cycleDurationBase = Math.max(7.8, 14.2 - (power / 100) * 5.0 - (score / 100) * 1.5);
 
   const climbType: 'trap_deep' | 'deep_climb' | 'park' =
     score >= 94 ? 'trap_deep' : score >= 75 ? 'deep_climb' : 'park';
@@ -309,7 +310,7 @@ export function getTeamBehaviorProfile(team: Team): TeamBehaviorProfile {
     climbProfile: {
       preferred: climbType,
       successRate: Math.min(0.98, Math.max(0.75, (score / 100) * 0.95)),
-      durationSec: Number((6.5 - (tec / 100) * 2.5).toFixed(1)),
+      durationSec: Number((6.5 - (power / 100) * 2.5).toFixed(1)),
     },
     signatureMove: `${team.name} Signature ${shootingStyle === 'subwoofer' ? 'Subwoofer Strike' : 'Podium Release'}`,
     tacticalQuote: `${team.name} (#${team.number}) sahada ${shootingStyle} stili ve ${cycleDurationBase.toFixed(1)}s döngü ortalamasıyla mücadele ediyor.`,
@@ -346,10 +347,9 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
   // Classification thresholds stay on the behaviour profile; the numbers quoted in the text
   // come from scouted stats so they match the rest of the team profile.
   const scouted = (team.frcStats ?? getEnhancedTeamStats(team)).cycles;
-  const tec = team.stats?.tec ?? 50;
-  const dat = team.stats?.dat ?? 50;
-  const sus = team.stats?.sus ?? 50;
-  const out = team.stats?.out ?? 50;
+  const power = team.stats?.opr ?? 50; // real best-event OPR percentile
+  const winPct = team.stats?.win ?? 50;
+  const expPct = team.stats?.exp ?? 50;
   const score = team.score ?? 70;
 
   const isHighThreat = team.tags?.includes('High Threat');
@@ -385,7 +385,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
       ],
       scoutingHighlights: [
         `Savunma Eğilimi: %${p.defenseTendency}`,
-        `Sertlik & Dayanıklılık Skoru: ${tec}/100`,
+        `Skor Gücü (OPR) Yüzdeliği: %${power}`,
         `Karakteristik Hamle: ${p.signatureMove}`,
       ],
     };
@@ -393,7 +393,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
 
   // 2. Cycle-focused Archetype Check
   if (
-    (tec >= 80 && p.cycleDurationBase <= 8.6 && p.defenseTendency <= 25) ||
+    (power >= 80 && p.cycleDurationBase <= 8.6 && p.defenseTendency <= 25) ||
     team.tags?.includes('Top Seed') ||
     score >= 93
   ) {
@@ -450,7 +450,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
       ],
       scoutingHighlights: [
         `Atış Bölgesi: ${p.shootingStyle.toUpperCase()}`,
-        `Teknik Vizyon Puanı: ${tec}/100`,
+        `Skor Gücü (OPR) Yüzdeliği: %${power}`,
         `İmza Tekniği: ${p.signatureMove}`,
       ],
     };
@@ -460,7 +460,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
   if (
     p.cycleRoute === 'wall_chute' ||
     p.cycleRoute === 'feeder_shuttle' ||
-    (tec < 74 && score >= 65)
+    (power < 74 && score >= 65)
   ) {
     return {
       coreArchetype: 'Feeder / Shuttle',
@@ -507,7 +507,7 @@ export function deriveCoreArchetype(team: Team, profile?: TeamBehaviorProfile): 
       'Aşırı agresif savunmacılara karşı yıpranma',
     ],
     scoutingHighlights: [
-      `Dengeli Puan Profili: TEC ${tec} • DAT ${dat} • SUS ${sus}`,
+      `Yüzdelikler: OPR %${power} • Galibiyet %${winPct} • Deneyim %${expPct}`,
       `Otonom: ${p.autoNoteCount} Nota`,
       `Tırmanış Tipi: ${p.climbProfile.preferred.toUpperCase()}`,
     ],
@@ -544,60 +544,44 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
   const allyArchetype = deriveCoreArchetype(ally, allyProfile);
   const rivalArchetype = deriveCoreArchetype(rival, rivalProfile);
 
-  // Threat Level calculation
+  // Threat comes from real scoring power (best-event OPR percentile). The Pre-PR score is an
+  // Impact ranking and says nothing about how dangerous a robot is on the field.
   let threatLevel: MatchupTacticsIntel['threatLevel'] = 'MODERATE';
-  if (rival.score >= 92 || rival.stats.tec >= 90) {
+  if (rival.stats.opr >= 90) {
     threatLevel = 'CRITICAL';
-  } else if (rival.score >= 82 || rival.stats.tec >= 80) {
+  } else if (rival.stats.opr >= 75) {
     threatLevel = 'HIGH';
-  } else if (rival.score <= 72) {
+  } else if (rival.stats.opr <= 30) {
     threatLevel = 'MANAGEABLE';
   }
 
-  // Same EPA logistic model the match simulator uses, so both screens agree.
+  // Same rating model the match simulator uses, so both screens agree.
   const allyStats = ally.frcStats ?? getEnhancedTeamStats(ally);
   const rivalStats = rival.frcStats ?? getEnhancedTeamStats(rival);
   const winProbabilityEstimate = epaWinPercent(allyStats.epa.total, rivalStats.epa.total);
 
-  // Cycle time and climb success come from the scouted stats (the simulator's primary source
-  // too), so this table agrees with the Pit Scouting tab instead of the behaviour profile.
-  const allyCycle = allyStats.cycles.avgCycleTimeSec;
-  const rivalCycle = rivalStats.cycles.avgCycleTimeSec;
-  const allyClimb = allyStats.cycles.climbSuccessPct;
-  const rivalClimb = rivalStats.cycles.climbSuccessPct;
-
-  // Key Matchup Deltas
+  // Head-to-head rows use real 2026 results only.
+  const allyReal = getRealMetrics(ally.number);
+  const rivalReal = getRealMetrics(rival.number);
+  const row = (
+    label: string,
+    a: number | null | undefined,
+    r: number | null | undefined,
+    format: (v: number) => string,
+    lowerIsBetter = false
+  ): MatchupTacticsIntel['matchupDeltas'][number] => {
+    const av = a ?? null;
+    const rv = r ?? null;
+    let advantage: 'ally' | 'rival' | 'even' = 'even';
+    if (av !== null && rv !== null && av !== rv) advantage = (av > rv) !== lowerIsBetter ? 'ally' : 'rival';
+    return { label, allyVal: av === null ? '—' : format(av), rivalVal: rv === null ? '—' : format(rv), advantage };
+  };
   const matchupDeltas: MatchupTacticsIntel['matchupDeltas'] = [
-    {
-      label: 'Döngü Süresi (Cycle)',
-      allyVal: `${allyCycle}s`,
-      rivalVal: `${rivalCycle}s`,
-      advantage: allyCycle < rivalCycle ? 'ally' : allyCycle > rivalCycle ? 'rival' : 'even',
-    },
-    {
-      label: 'Otonom Nota Potansiyeli',
-      allyVal: `${allyProfile.autoNoteCount} Nota`,
-      rivalVal: `${rivalProfile.autoNoteCount} Nota`,
-      advantage: allyProfile.autoNoteCount > rivalProfile.autoNoteCount ? 'ally' : allyProfile.autoNoteCount < rivalProfile.autoNoteCount ? 'rival' : 'even',
-    },
-    {
-      label: 'Teknik Mekanizma Gücü',
-      allyVal: `${ally.stats.tec || 70}/100`,
-      rivalVal: `${rival.stats.tec || 70}/100`,
-      advantage: (ally.stats.tec || 70) > (rival.stats.tec || 70) ? 'ally' : (ally.stats.tec || 70) < (rival.stats.tec || 70) ? 'rival' : 'even',
-    },
-    {
-      label: 'Scouting & Veri Analitiği',
-      allyVal: `${ally.stats.dat || 70}/100`,
-      rivalVal: `${rival.stats.dat || 70}/100`,
-      advantage: (ally.stats.dat || 70) > (rival.stats.dat || 70) ? 'ally' : (ally.stats.dat || 70) < (rival.stats.dat || 70) ? 'rival' : 'even',
-    },
-    {
-      label: 'Tırmanış Başarı Oranı',
-      allyVal: `%${allyClimb}`,
-      rivalVal: `%${rivalClimb}`,
-      advantage: allyClimb > rivalClimb ? 'ally' : allyClimb < rivalClimb ? 'rival' : 'even',
-    },
+    row('En İyi OPR (2026)', allyReal?.bestOpr, rivalReal?.bestOpr, (v) => v.toFixed(1)),
+    row('Galibiyet Oranı (2026)', winRateOf(allyReal?.record ?? null), winRateOf(rivalReal?.record ?? null), (v) => `%${v}`),
+    row('En İyi Etkinlik Sırası', allyReal?.bestEventRank, rivalReal?.bestEventRank, (v) => `#${v}`, true),
+    row('2026 Ödülleri', allyReal?.awards2026, rivalReal?.awards2026, (v) => String(v)),
+    row('Impact Ödülleri (tüm yıllar)', allyReal?.impactWins, rivalReal?.impactWins, (v) => String(v)),
   ];
 
   // Proactively generate archetype-specific tactics
@@ -642,7 +626,7 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       id: 'teleop-lane-choke',
       phase: 'Teleop Cycle',
       title: 'Orta Saha Koridor Daraltması (Midfield Lane Choke)',
-      summary: `Rakibin ${rivalCycle}s olan döngü süresini serbest koridorları kapatıp 12s+ üzerine çekin.`,
+      summary: 'Rakibin döngü süresini serbest koridorları kapatarak uzatın.',
       recommendedAction:
         'İttifak partnerinizi rakibin düz hat transit koridoruna yerleştirin. Bumper temaslarıyla yönünü saptırarak Subwoofer yerine zor açılardan şut atmaya zorlayın.',
       impact: 'GAME CHANGER',
@@ -706,7 +690,7 @@ export function generateMatchupTactics(ally: Team, rival: Team): MatchupTacticsI
       id: 'endgame-harmony-lock',
       phase: 'Endgame',
       title: 'Stage Harmony & Derin Tırmanış Sigortası',
-      summary: `Son 20 saniyede riske girmeden %${allyClimb} başarı oranlı tırmanışı kilitleyin.`,
+      summary: 'Son 20 saniyede riske girmeden tırmanışı kilitleyin.',
       recommendedAction:
         'Kafes / zincir yapısına 135. saniyede yanaşın. Partner robotla aynı zincirde çift tırmanış (Stage Harmony) yaparak +16 ila +20 endgame puanı toplayın.',
       impact: 'HIGH VALUE',

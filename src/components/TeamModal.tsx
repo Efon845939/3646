@@ -28,7 +28,8 @@ import {
   Award,
   ListOrdered,
 } from 'lucide-react';
-import { Team, mockTeams, getStatFullName, getEnhancedTeamStats } from '../data';
+import { Team, mockTeams, STAT_META, getEnhancedTeamStats } from '../data';
+import { formatRecord, getRealMetrics, REAL_DATA_YEAR, winRateOf } from '../utils/realMetrics';
 import { MatchupIntelPanel } from './MatchupIntelPanel';
 import { PICKLIST_LANES, PICKLIST_LANE_META, PicklistLane } from '../hooks/usePicklist';
 import { HOST_TEAM_NUMBER } from '../utils/quickFilters';
@@ -116,79 +117,7 @@ export function TeamModal({
     };
   }, []);
 
-  const [chartViewMode, setChartViewMode] = useState<'trend' | 'deviation'>('trend');
-
-  const {
-    trendData,
-    avgScore,
-    latestTrendDelta,
-    maxDeviation,
-    minDeviation,
-    volatility,
-    projectedScore,
-  } = useMemo(() => {
-    const base = team.score;
-    const seed = team.number;
-    const rawOffsets = [
-      ((seed * 7 + 13) % 9) - 4,
-      ((seed * 11 + 5) % 9) - 3,
-      ((seed * 13 + 17) % 11) - 5,
-      ((seed * 17 + 23) % 9) - 3,
-      ((seed * 19 + 3) % 11) - 4,
-      ((seed * 23 + 7) % 7) - 2,
-      Math.round(((team.stats.tec - 50) * 0.08) + 1),
-      Math.round(((team.stats.tec - 50) * 0.12) + 2),
-    ];
-
-    const matchLabels = ['QM1', 'QM3', 'QM5', 'QM8', 'QM10', 'QM12', 'SF1*', 'F1*'];
-    const matchFullLabels = [
-      'Qual Match 1',
-      'Qual Match 3',
-      'Qual Match 5',
-      'Qual Match 8',
-      'Qual Match 10',
-      'Qual Match 12',
-      'Playoff Semifinal 1 (Projected)',
-      'Playoff Final 1 (Projected)',
-    ];
-
-    const points = rawOffsets.map((offset, idx) => {
-      const isProjected = idx >= 6;
-      const finalScore = Math.min(100, Math.max(20, base + offset));
-      const deviation = Math.round((finalScore - base) * 10) / 10;
-
-      return {
-        match: matchLabels[idx],
-        fullMatch: matchFullLabels[idx],
-        score: finalScore,
-        avg: base,
-        deviation: deviation,
-        isProjected,
-      };
-    });
-
-    const actualPoints = points.filter((p) => !p.isProjected);
-    const avgScore = base;
-    const latestActual = actualPoints[actualPoints.length - 1];
-    const firstActual = actualPoints[0];
-    const latestTrendDelta = Math.round((latestActual.score - firstActual.score) * 10) / 10;
-    const deviations = actualPoints.map((p) => p.deviation);
-    const maxDeviation = Math.max(...deviations);
-    const minDeviation = Math.min(...deviations);
-    const variance = actualPoints.reduce((acc, p) => acc + Math.pow(p.score - base, 2), 0) / actualPoints.length;
-    const volatility = Math.round(Math.sqrt(variance) * 10) / 10;
-    const projectedScore = points[points.length - 1].score;
-
-    return {
-      trendData: points,
-      avgScore,
-      latestTrendDelta,
-      maxDeviation,
-      minDeviation,
-      volatility,
-      projectedScore,
-    };
-  }, [team.number, team.score, team.stats.tec]);
+  const real = getRealMetrics(team.number);
 
   // Radar Overlay Comparison state
   const [isOverlayEnabled, setIsOverlayEnabled] = useState(false);
@@ -213,38 +142,19 @@ export function TeamModal({
       .sort((a, b) => b.score - a.score);
   }, [team.number]);
 
-  const radarData = useMemo(() => {
-    const categories: Array<{
-      key: keyof Team['stats'];
-      subject: string;
-      fullName: string;
-      desc: string;
-    }> = [
-      { key: 'out', subject: 'OUT', fullName: 'Outreach & Impact', desc: 'Community STEM and mentoring reach' },
-      { key: 'sus', subject: 'SUS', fullName: 'Sustainability', desc: 'Financial stability & sponsor retention' },
-      { key: 'tec', subject: 'TEC', fullName: 'Technical Floor', desc: 'Drivetrain, swerve, intake & shooter' },
-      { key: 'pip', subject: 'PIP', fullName: 'Talent Pipeline', desc: 'Subteam training & student handover' },
-      { key: 'med', subject: 'MED', fullName: 'Media & Branding', desc: 'Identity, pit presentation & social reach' },
-      { key: 'dat', subject: 'DAT', fullName: 'Data & Analytics', desc: 'Match strategy, scouting app & telemetry' },
-    ];
-
-    return categories.map((cat) => {
-      const primaryVal = team.stats[cat.key];
-      const secondaryVal = overlayTeam ? overlayTeam.stats[cat.key] : 0;
-      const delta = primaryVal - secondaryVal;
-
-      return {
-        subject: cat.subject,
-        fullName: cat.fullName,
-        desc: cat.desc,
-        key: cat.key,
-        A: primaryVal,
-        B: secondaryVal,
-        delta,
+  const radarData = useMemo(
+    () =>
+      (Object.keys(STAT_META) as Array<keyof typeof STAT_META>).map((key) => ({
+        subject: STAT_META[key].label,
+        fullName: STAT_META[key].fullName,
+        desc: STAT_META[key].desc,
+        key,
+        A: team.stats[key],
+        B: overlayTeam ? overlayTeam.stats[key] : 0,
         fullMark: 100,
-      };
-    });
-  }, [team.stats, overlayTeam]);
+      })),
+    [team.stats, overlayTeam]
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xs overflow-y-auto">
@@ -299,7 +209,7 @@ export function TeamModal({
           <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
             {onSetPicklistLane && team.number !== HOST_TEAM_NUMBER && (
               <div
-                className="inline-flex items-center rounded-lg border border-border-main bg-surface p-0.5 text-[10px] font-bold uppercase"
+                className="inline-flex items-center rounded-lg border border-border-main bg-surface p-0.5 text-xs font-bold uppercase"
                 role="group"
                 aria-label="Picklist lane"
               >
@@ -386,7 +296,7 @@ export function TeamModal({
             }`}
           >
             <Gauge className="w-3.5 h-3.5" />
-            <span>FRC Performance & Statbotics</span>
+            <span>Season Performance</span>
           </button>
           <button
             type="button"
@@ -418,79 +328,33 @@ export function TeamModal({
         <div className="p-5 overflow-y-auto space-y-6 flex-1 font-inter">
           {activeTab === 'analytics' && (
             <>
-              {/* Statbotics & TBA Key Metrics Overview Grid */}
+              {/* Real season summary from The Blue Alliance */}
               <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-3 flex items-center gap-1.5">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
                   <Gauge className="w-4 h-4 text-accent" />
-                  <span>Statbotics EPA & Power Rating Telemetry</span>
+                  <span>{REAL_DATA_YEAR} Season · The Blue Alliance</span>
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-                  <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
-                    <span className="text-[9px] uppercase font-bold text-text-muted">Total EPA</span>
-                    <div className="text-xl font-mono font-black text-accent mt-1">
-                      {frcStats.epa.total}
-                    </div>
-                    <span className="text-[9px] text-text-muted font-mono">
-                      Top {100 - frcStats.epa.percentile}% (Rank #{frcStats.seasonRank.worldRank})
-                    </span>
-                  </div>
-
-                  <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
-                    <span className="text-[9px] uppercase font-bold text-text-muted">Auto EPA</span>
-                    <div className="text-xl font-mono font-bold text-text-main mt-1">
-                      {frcStats.epa.auto}
-                    </div>
-                    <span className="text-[9px] text-text-muted font-mono">Autonomous phase</span>
-                  </div>
-
-                  <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
-                    <span className="text-[9px] uppercase font-bold text-text-muted">Teleop EPA</span>
-                    <div className="text-xl font-mono font-bold text-text-main mt-1">
-                      {frcStats.epa.teleop}
-                    </div>
-                    <span className="text-[9px] text-text-muted font-mono">Driver control cycles</span>
-                  </div>
-
-                  <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
-                    <span className="text-[9px] uppercase font-bold text-text-muted">Endgame EPA</span>
-                    <div className="text-xl font-mono font-bold text-text-main/80 mt-1">
-                      {frcStats.epa.endgame}
-                    </div>
-                    <span className="text-[9px] text-text-muted font-mono">Stage & climb points</span>
-                  </div>
-
-                  <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
-                    <span className="text-[9px] uppercase font-bold text-text-muted">OPR / DPR</span>
-                    <div className="text-xl font-mono font-bold text-text-main mt-1">
-                      {frcStats.opr} <span className="text-xs text-text-muted">/ {frcStats.dpr}</span>
-                    </div>
-                    <span className="text-[9px] text-text-muted font-mono">CCWM: {frcStats.ccwm}</span>
-                  </div>
-
-                  <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
-                    <span className="text-[9px] uppercase font-bold text-text-muted">Match Record</span>
-                    <div className="text-xl font-mono font-bold text-accent mt-1">
-                      {frcStats.record.winRate}%
-                    </div>
-                    <span className="text-[9px] text-text-muted font-mono">
-                      {frcStats.record.wins}W - {frcStats.record.losses}L {frcStats.record.ties > 0 ? `(${frcStats.record.ties}T)` : ''}
-                    </span>
-                  </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <SeasonStat label="Record" value={formatRecord(real?.record ?? null)} />
+                  <SeasonStat label="Win Rate" value={`${winRateOf(real?.record ?? null) ?? '—'}%`} accent />
+                  <SeasonStat label="Best OPR" value={real?.bestOpr ?? '—'} accent />
+                  <SeasonStat label="Best Event Rank" value={real?.bestEventRank ? `#${real.bestEventRank}` : '—'} />
+                  <SeasonStat label={`${REAL_DATA_YEAR} Awards`} value={real?.awards2026 ?? 0} />
+                  <SeasonStat label="Impact Wins" value={real?.impactWins ?? 0} />
                 </div>
               </div>
 
-              {/* Radar Chart & Score Trajectory Side-by-Side */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Radar Chart */}
                 <div className="bg-bg-dark rounded-xl border border-border-main p-4 flex flex-col">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                      Attribute Profile Radar
+                    <span className="text-sm font-bold uppercase tracking-wider text-text-muted">
+                      Profile Radar (percentiles)
                     </span>
                     <button
                       type="button"
                       onClick={() => setIsOverlayEnabled(!isOverlayEnabled)}
-                      className={`text-[10px] px-2 py-1 rounded font-bold uppercase border transition-colors flex items-center gap-1.5 ${
+                      className={`text-xs px-2 py-1 rounded font-bold uppercase border transition-colors flex items-center gap-1.5 ${
                         isOverlayEnabled
                           ? 'bg-sky-400 text-[#111111] border-sky-400'
                           : 'bg-surface hover:bg-surface-hover text-text-muted border-border-main'
@@ -503,7 +367,7 @@ export function TeamModal({
 
                   {isOverlayEnabled && (
                     <div className="mb-3 p-2 bg-surface rounded-lg border border-sky-500/30 flex items-center justify-between text-xs">
-                      <span className="text-sky-400 font-bold uppercase text-[10px]">Benchmark vs:</span>
+                      <span className="text-sky-400 font-bold uppercase text-xs">Benchmark vs:</span>
                       <select
                         value={overlayTeamNumber}
                         onChange={(e) => setOverlayTeamNumber(Number(e.target.value))}
@@ -524,7 +388,7 @@ export function TeamModal({
                         <PolarGrid stroke="#27272a" strokeWidth={1} />
                         <PolarAngleAxis
                           dataKey="subject"
-                          tick={{ fill: '#A1A1AA', fontSize: 10, fontFamily: 'monospace', fontWeight: 700 }}
+                          tick={{ fill: '#A1A1AA', fontSize: 12, fontFamily: 'monospace', fontWeight: 700 }}
                         />
                         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                         <Radar
@@ -551,87 +415,80 @@ export function TeamModal({
                   </div>
                 </div>
 
-                {/* Score Trend & Deviation Chart */}
+                {/* Every 2026 event with its real result */}
                 <div className="bg-bg-dark rounded-xl border border-border-main p-4 flex flex-col">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-text-muted">
-                      Match Performance Trajectory
-                    </span>
-                    <div className="inline-flex rounded-md bg-surface p-0.5 border border-border-main text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => setChartViewMode('trend')}
-                        className={`px-2 py-0.5 rounded font-bold uppercase ${
-                          chartViewMode === 'trend' ? 'bg-integra-yellow text-[#111111]' : 'text-text-muted'
-                        }`}
-                      >
-                        Score Trend
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setChartViewMode('deviation')}
-                        className={`px-2 py-0.5 rounded font-bold uppercase ${
-                          chartViewMode === 'deviation' ? 'bg-integra-yellow text-[#111111]' : 'text-text-muted'
-                        }`}
-                      >
-                        Deviation (Δ)
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 mb-2 text-center text-xs">
-                    <div className="p-1.5 bg-surface rounded border border-border-main/50">
-                      <span className="text-[9px] text-text-muted block">Avg Score</span>
-                      <span className="font-mono font-bold text-text-main">{avgScore} pts</span>
-                    </div>
-                    <div className="p-1.5 bg-surface rounded border border-border-main/50">
-                      <span className="text-[9px] text-text-muted block">Trajectory</span>
-                      <span
-                        className={`font-mono font-bold ${
-                          latestTrendDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {latestTrendDelta >= 0 ? `+${latestTrendDelta}` : latestTrendDelta} pts
-                      </span>
-                    </div>
-                    <div className="p-1.5 bg-surface rounded border border-border-main/50">
-                      <span className="text-[9px] text-text-muted block">Playoff Proj</span>
-                      <span className="font-mono font-bold text-amber-300">~{projectedScore} pts</span>
-                    </div>
-                  </div>
-
-                  <div className="h-[210px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={trendData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                        <CartesianGrid stroke="#27272a" strokeDasharray="3 3" vertical={false} />
-                        <XAxis
-                          dataKey="match"
-                          tick={{ fill: '#A1A1AA', fontSize: 10, fontFamily: 'monospace' }}
-                        />
-                        <YAxis tick={{ fill: '#A1A1AA', fontSize: 9, fontFamily: 'monospace' }} />
-                        <ReferenceLine
-                          y={chartViewMode === 'trend' ? avgScore : 0}
-                          stroke="#71717A"
-                          strokeDasharray="4 4"
-                        />
-                        <Tooltip />
-                        <Line
-                          type="monotone"
-                          dataKey={chartViewMode === 'trend' ? 'score' : 'deviation'}
-                          stroke="#FEDE00"
-                          strokeWidth={2}
-                          dot={{ r: 3, fill: '#FEDE00' }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <span className="text-sm font-bold uppercase tracking-wider text-text-muted mb-3">
+                    {REAL_DATA_YEAR} Events
+                  </span>
+                  {real && real.events.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs uppercase tracking-wider text-text-muted border-b border-border-main">
+                          <th className="text-left font-bold pb-2">Event</th>
+                          <th className="text-right font-bold pb-2 pl-3 whitespace-nowrap">Rank</th>
+                          <th className="text-right font-bold pb-2 pl-3 whitespace-nowrap">W-L-T</th>
+                          <th className="text-right font-bold pb-2 pl-3 whitespace-nowrap">OPR</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-main/60">
+                        {real.events.map((event) => (
+                          <tr key={event.key} className="align-top">
+                            <td className="py-2 pr-2">
+                              <span className="font-semibold text-text-main">{event.name}</span>
+                              {event.awards.length > 0 && (
+                                <span className="block text-xs text-accent mt-0.5">🏆 {event.awards.join(', ')}</span>
+                              )}
+                              {event.playoff && (
+                                <span className="block text-xs text-text-muted mt-0.5">Playoffs: {event.playoff}</span>
+                              )}
+                            </td>
+                            <td className="py-2 pl-3 text-right font-mono whitespace-nowrap">{event.rank ? `#${event.rank}` : '—'}</td>
+                            <td className="py-2 pl-3 text-right font-mono whitespace-nowrap">{event.record.join('-')}</td>
+                            <td className="py-2 pl-3 text-right font-mono font-bold whitespace-nowrap">{event.opr ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <p className="text-sm text-text-muted">No {REAL_DATA_YEAR} events on record.</p>
+                  )}
+                  {real?.pool && (
+                    <p className="text-sm text-text-muted mt-3">
+                      {real.pool.name}: <span className="font-bold text-text-main">#{real.pool.rank}</span> ({real.pool.points} pts)
+                    </p>
+                  )}
                 </div>
               </div>
+
+              {/* Impact award record, all seasons */}
+              {real && real.impactHistory.length > 0 && (
+                <div className="bg-bg-dark rounded-xl border border-border-main p-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-accent" />
+                    <span>Impact / Chairman's Award History</span>
+                  </h3>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {real.impactHistory.map((award, i) => (
+                      <li key={i} className="p-2.5 rounded-lg bg-surface border border-border-main text-sm">
+                        <span className="font-mono font-bold text-text-main">{award.year}</span>{' '}
+                        <span className={/Finalist/.test(award.name) ? 'text-text-muted' : 'text-accent font-semibold'}>
+                          {award.name}
+                        </span>
+                        <span className="block text-xs text-text-muted">{award.event}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </>
           )}
 
           {activeTab === 'specs' && (
             <div className="space-y-6">
+              <p className="text-sm p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-text-main">
+                These pit specs are placeholders, not verified data. No public source lists drivetrains,
+                motors or auto routines, so replace them with what your scouts see in the pits.
+              </p>
               {/* Hardware & Mechanical Specifications */}
               <div className="bg-bg-dark rounded-xl border border-border-main p-5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-4 flex items-center gap-2">
@@ -640,31 +497,31 @@ export function TeamModal({
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
                   <div className="p-3 bg-surface rounded-lg border border-border-main">
-                    <span className="text-[10px] uppercase font-bold text-text-muted">Drivetrain</span>
+                    <span className="text-xs uppercase font-bold text-text-muted">Drivetrain</span>
                     <p className="font-bold font-mono text-text-main mt-1">{frcStats.specs.drivetrain}</p>
                   </div>
                   <div className="p-3 bg-surface rounded-lg border border-border-main">
-                    <span className="text-[10px] uppercase font-bold text-text-muted">Drive Motors</span>
+                    <span className="text-xs uppercase font-bold text-text-muted">Drive Motors</span>
                     <p className="font-bold font-mono text-text-main mt-1">{frcStats.specs.driveMotors}</p>
                   </div>
                   <div className="p-3 bg-surface rounded-lg border border-border-main">
-                    <span className="text-[10px] uppercase font-bold text-text-muted">Dimensions & Weight</span>
+                    <span className="text-xs uppercase font-bold text-text-muted">Dimensions & Weight</span>
                     <p className="font-bold font-mono text-text-main mt-1">
                       {frcStats.specs.dimensions} • {frcStats.specs.weightLbs} lbs
                     </p>
                   </div>
                   <div className="p-3 bg-surface rounded-lg border border-border-main">
-                    <span className="text-[10px] uppercase font-bold text-text-muted">Vision Tracking</span>
+                    <span className="text-xs uppercase font-bold text-text-muted">Vision Tracking</span>
                     <p className="font-bold font-mono text-text-main mt-1">{frcStats.specs.visionSystem}</p>
                   </div>
                   <div className="p-3 bg-surface rounded-lg border border-border-main">
-                    <span className="text-[10px] uppercase font-bold text-text-muted">Endgame Mechanism</span>
+                    <span className="text-xs uppercase font-bold text-text-muted">Endgame Mechanism</span>
                     <p className="font-bold font-mono text-emerald-400 mt-1">
                       {frcStats.cycles.climbType} ({frcStats.cycles.climbSuccessPct}% success, {frcStats.cycles.avgClimbSec}s)
                     </p>
                   </div>
                   <div className="p-3 bg-surface rounded-lg border border-border-main">
-                    <span className="text-[10px] uppercase font-bold text-text-muted">Teleop Cycling Metric</span>
+                    <span className="text-xs uppercase font-bold text-text-muted">Teleop Cycling Metric</span>
                     <p className="font-bold font-mono text-amber-400 mt-1">
                       {frcStats.cycles.avgTeleopCycles} pieces/match • {frcStats.cycles.avgCycleTimeSec}s cycle time
                     </p>
@@ -676,7 +533,7 @@ export function TeamModal({
               <div className="bg-bg-dark rounded-xl border border-border-main p-5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
                   <Compass className="w-4 h-4 text-sky-400" />
-                  <span>Documented Autonomous Routines</span>
+                  <span>Autonomous Routines (unverified)</span>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {frcStats.specs.autoRoutines.map((routine, idx) => (
@@ -693,31 +550,6 @@ export function TeamModal({
                 </div>
               </div>
 
-              {/* Verified Awards & History */}
-              {team.awards && team.awards.length > 0 && (
-                <div className="bg-bg-dark rounded-xl border border-border-main p-5">
-                  <div className="flex items-center justify-between border-b border-border-main pb-2 mb-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-text-main flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-accent" />
-                      <span>Resmi FIRST & The Blue Alliance Ödül Geçmişi</span>
-                    </h3>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-integra-yellow/20 text-accent font-bold font-mono">
-                      {team.awards.length} Ödül
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
-                    {team.awards.map((award, i) => (
-                      <div
-                        key={i}
-                        className="p-2 rounded-lg bg-surface border border-border-main text-xs flex items-start gap-2"
-                      >
-                        <Trophy className="w-3.5 h-3.5 text-accent shrink-0 mt-0.5" />
-                        <span className="text-text-main/80 font-medium leading-snug">{award}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -788,14 +620,14 @@ export function TeamModal({
                 </div>
 
                 <div className="p-3 bg-surface rounded-lg border border-border-main">
-                  <span className="text-[10px] uppercase font-bold text-accent block mb-1">
+                  <span className="text-xs uppercase font-bold text-accent block mb-1">
                     Tactical Counter-Play & Recommendation
                   </span>
                   <p className="text-xs text-text-main leading-relaxed">{team.counterPlay}</p>
                 </div>
 
                 <div className="p-3 bg-surface rounded-lg border border-border-main">
-                  <span className="text-[10px] uppercase font-bold text-text-muted block mb-1">
+                  <span className="text-xs uppercase font-bold text-text-muted block mb-1">
                     Seasonal Performance Outlook
                   </span>
                   <p className="text-xs text-text-muted leading-relaxed">{team.prediction}</p>
@@ -810,7 +642,7 @@ export function TeamModal({
                     <span>Scout Notes & Pit Observations</span>
                   </h3>
                   {savedStatus && (
-                    <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
                       <Check className="w-3 h-3" /> Saved locally
                     </span>
                   )}
@@ -822,7 +654,7 @@ export function TeamModal({
                   rows={3}
                   className="w-full bg-surface border border-border-main rounded-lg p-3 text-xs text-text-main placeholder-text-muted outline-none focus:border-integra-yellow transition-colors resize-none leading-relaxed"
                 />
-                <div className="flex justify-between items-center mt-2 text-[10px] text-text-muted">
+                <div className="flex justify-between items-center mt-2 text-xs text-text-muted">
                   <span>Persisted in browser localStorage for this team</span>
                   {notes && (
                     <button
@@ -839,6 +671,15 @@ export function TeamModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SeasonStat({ label, value, accent = false }: { label: string; value: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="p-3 bg-bg-dark rounded-xl border border-border-main">
+      <span className="text-xs uppercase font-bold text-text-muted">{label}</span>
+      <div className={`text-2xl font-mono font-black mt-1 ${accent ? 'text-accent' : 'text-text-main'}`}>{value}</div>
     </div>
   );
 }

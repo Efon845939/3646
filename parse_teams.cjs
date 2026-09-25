@@ -1,3 +1,7 @@
+// LEGACY one-off importer, kept only as the provenance of the Pre-PR ranking list below.
+// Do not re-run it: it overwrites src/data.ts, fills every rating with Math.random(), and its
+// leading-digits regex turned "6429" + "4th Dimension" into a non-existent team 64294.
+// Real performance data now comes from scripts/fetch-tba.mjs and scripts/build-team-metrics.mjs.
 const fs = require('fs');
 
 const text = `1	1678Citrus Circuits	97	Elite

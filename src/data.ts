@@ -1,23 +1,18 @@
-
 import { FRCPerformanceStats, getEnhancedTeamStats } from './utils/frcStatsData';
+import { applyRealStats, computeRadarPercentiles, getRealMetrics, RadarKey } from './utils/realMetrics';
 
-export interface TeamStats {
-  out: number;
-  sus: number;
-  tec: number;
-  pip: number;
-  med: number;
-  dat: number;
-}
+// Radar ratings: each is a percentile (0–100) within this team list, computed from real 2026
+// data (see utils/realMetrics.ts). They replace six ratings that were generated at random.
+export type TeamStats = Record<RadarKey, number>;
 
 export const STAT_META = {
-  out: { label: 'OUT', fullName: 'Outreach & Impact', desc: 'Community programs, STEM mentoring & global impact reach' },
-  sus: { label: 'SUS', fullName: 'Sustainability', desc: 'Financial stability, 501(c)(3) sponsorship & student retention' },
-  tec: { label: 'TEC', fullName: 'Technical Floor', desc: 'Robot swerve speed, shooter accuracy, Limelight vision & floor intake' },
-  pip: { label: 'PIP', fullName: 'Talent Pipeline', desc: 'Subteam training, veteran mentoring & recruitment pipeline' },
-  med: { label: 'MED', fullName: 'Media & Branding', desc: 'Visual brand identity, social presence & pit presentation' },
-  dat: { label: 'DAT', fullName: 'Data & Analytics', desc: 'Scouting accuracy, real-time match telemetry & picklist strategy' },
-} as const;
+  win: { label: 'WIN', fullName: 'Win Rate', desc: '2026 official win rate (The Blue Alliance)' },
+  opr: { label: 'OPR', fullName: 'Scoring Power', desc: 'Best 2026 event OPR from qualification match scores' },
+  rnk: { label: 'RNK', fullName: 'Event Ranking', desc: 'Best qualification rank at a 2026 event' },
+  awd: { label: 'AWD', fullName: '2026 Awards', desc: 'Awards won at 2026 events' },
+  imp: { label: 'IMP', fullName: 'Impact Legacy', desc: "Impact / Chairman's Award wins across all seasons" },
+  exp: { label: 'EXP', fullName: 'Experience', desc: 'Seasons since rookie year' },
+} as const satisfies Record<RadarKey, { label: string; fullName: string; desc: string }>;
 
 export function getStatFullName(statKeyOrLabel: string): string {
   const normalized = statKeyOrLabel.trim().toLowerCase();
@@ -58,7 +53,8 @@ export interface Team {
 export type { FRCPerformanceStats };
 export { getEnhancedTeamStats };
 
-const RAW_TEAMS: Team[] = [
+// Hand-entered scouting profiles. `stats` (radar) and `frcStats` are derived below.
+const RAW_TEAMS: Omit<Team, 'stats' | 'frcStats'>[] = [
   {
     "number": 1678,
     "name": "Citrus Circuits",
@@ -77,14 +73,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A powerhouse in impact with a legacy of wide-reaching sustainability.",
     "prediction": "Expected to maintain high rank due to robust impact scoring and consistent technical floor.",
     "counterPlay": "Capitalize on any early-season technical delays caused by their relocation.",
-    "stats": {
-      "out": 58,
-      "sus": 61,
-      "tec": 61,
-      "pip": 61,
-      "med": 61,
-      "dat": 58
-    },
     "location": "Davis, CA - USA",
     "website": "https://www.citruscircuits.org",
     "tbaUrl": "https://www.thebluealliance.com/team/1678",
@@ -113,14 +101,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "The backbone of Arizona FRC, keeping the state competitive.",
     "prediction": "A resilient and resourceful team capable of deep playoff runs.",
     "counterPlay": "Outscore them in autonomous.",
-    "stats": {
-      "out": 50,
-      "sus": 58,
-      "tec": 50,
-      "pip": 71,
-      "med": 81,
-      "dat": 59
-    },
     "location": "Glendale, AZ - USA",
     "details": {
       "impact": "Founded Arizona Robotics League, the only free offseason league, providing $2.1M in free match play.",
@@ -148,14 +128,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "Transformed an entire city into a robotics powerhouse.",
     "prediction": "Consistently competitive with a deep talent pool.",
     "counterPlay": "Focus on consistent endgame performance.",
-    "stats": {
-      "out": 75,
-      "sus": 81,
-      "tec": 69,
-      "pip": 73,
-      "med": 67,
-      "dat": 66
-    },
     "location": "Dimona, Israel",
     "details": {
       "impact": "1 in 4 students in Dimona participates in FIRST (244 teams). Active Lab TikTok has 300K+ views.",
@@ -181,14 +153,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A hub of innovation transforming education in Taiwan.",
     "prediction": "A strong regional competitor with massive local influence.",
     "counterPlay": "Capitalize on early match momentum.",
-    "stats": {
-      "out": 73,
-      "sus": 87,
-      "tec": 64,
-      "pip": 60,
-      "med": 81,
-      "dat": 71
-    },
     "location": "Taipei, Taiwan",
     "details": {
       "impact": "Introduced FLL to 1500+ students. TechCube facility hosts FRC research conferences.",
@@ -214,14 +178,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "The vanguard of modern FRC software and open source development.",
     "prediction": "Will have unmatched software reliability and autonomous routines.",
     "counterPlay": "Defend heavily against their teleop cycles.",
-    "stats": {
-      "out": 88,
-      "sus": 61,
-      "tec": 65,
-      "pip": 55,
-      "med": 56,
-      "dat": 81
-    },
     "location": "Littleton, MA - USA",
     "details": {
       "impact": "AdvantageScope & AdvantageKit have 22,000+ installs and were added to standard FRC software. 147 FRC/44 FTC teams in Open Alliance.",
@@ -249,14 +205,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A small team with a truly global, life-changing mandate.",
     "prediction": "A dark horse with incredibly inspiring outreach.",
     "counterPlay": "Focus on offensive scoring consistency.",
-    "stats": {
-      "out": 78,
-      "sus": 74,
-      "tec": 70,
-      "pip": 56,
-      "med": 76,
-      "dat": 59
-    },
     "location": "Baden, PA - USA",
     "details": {
       "impact": "Reached 7,100+ kids. Built software tools for Cortical Visual Impairment (CVI).",
@@ -284,14 +232,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "The gold standard of FIRST. Their Everybot initiative has changed the entire program.",
     "prediction": "Always a threat to win the World Championship.",
     "counterPlay": "Flawless execution is required to beat them.",
-    "stats": {
-      "out": 52,
-      "sus": 74,
-      "tec": 86,
-      "pip": 83,
-      "med": 59,
-      "dat": 63
-    },
     "location": "Houston, TX - USA",
     "details": {
       "impact": "Everybot has inspired over 2,700 robots across 25 countries. NASA-JSC Robotics Academy.",
@@ -317,14 +257,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A giant in regional STEM pipeline creation.",
     "prediction": "Consistent elite performance fueled by a massive student base.",
     "counterPlay": "Target specific subsystem weaknesses if present.",
-    "stats": {
-      "out": 87,
-      "sus": 55,
-      "tec": 73,
-      "pip": 86,
-      "med": 82,
-      "dat": 58
-    },
     "location": "Naperville, IL - USA",
     "details": {
       "impact": "Introduced 22.3k to FIRST over 3 years. 41 FLL teams retained for 3 years.",
@@ -352,14 +284,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "The face of FIRST in India with unparalleled organizational reach.",
     "prediction": "Will drive massive growth of FRC in the region.",
     "counterPlay": "Outpace their cycle times in teleop.",
-    "stats": {
-      "out": 77,
-      "sus": 87,
-      "tec": 77,
-      "pip": 66,
-      "med": 68,
-      "dat": 77
-    },
     "location": "Mumbai, MH - India",
     "details": {
       "impact": "Reached 58k+ people. Hosted 4 official FTC India championships. Donated 450 reusable STEM kits.",
@@ -385,14 +309,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "Incredible community impact through structured outreach steps.",
     "prediction": "A strong contender for top regional awards.",
     "counterPlay": "Focus on maximizing autonomous consistency against them.",
-    "stats": {
-      "out": 60,
-      "sus": 85,
-      "tec": 58,
-      "pip": 53,
-      "med": 54,
-      "dat": 81
-    },
     "location": "Jundiaí, SP - Brazil",
     "details": {
       "impact": "Reached 1,435 children. 94% of alumni remain in STEM careers. Transformed computer labs in 9 schools.",
@@ -403,8 +319,8 @@ const RAW_TEAMS: Team[] = [
   {
     "number": 3646,
     "name": "INTEGRA BAHCESEHIR",
-    "score": 95,
-    "rank": 4,
+    "score": 92,
+    "rank": 11,
     "tier": "Elite",
     "tags": [
       "Impact Winner",
@@ -425,14 +341,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "Bahçeşehir Fen ve Teknoloji Lisesi'nin 2011 çaylak yılından bu yana Türk ve dünya FRC tarihine damga vuran en köklü ve ödüllü takımı; sürdürülebilirlik ve Impact kültürünün uluslararası temsilcisi.",
     "prediction": "2026 Sezonunda kazandığı Regional FIRST Impact Award ile Houston Dünya Şampiyonası'nda kürsü ve division liderliği için en güçlü aday.",
     "counterPlay": "Erken otonom nota üstünlüğü sağlamaya çalışın ve midfield besleme koridorlarında alan baskısı kurun.",
-    "stats": {
-      "out": 98,
-      "sus": 92,
-      "tec": 89,
-      "pip": 88,
-      "med": 94,
-      "dat": 90
-    },
     "location": "Bahçeşehir, Istanbul, Türkiye",
     "website": "https://integra3646.com",
     "tbaUrl": "https://www.thebluealliance.com/team/3646",
@@ -478,14 +386,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 63,
-      "sus": 58,
-      "tec": 83,
-      "pip": 53,
-      "med": 54,
-      "dat": 68
-    }
   },
   {
     "number": 2718,
@@ -504,14 +404,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 60,
-      "sus": 74,
-      "tec": 64,
-      "pip": 70,
-      "med": 51,
-      "dat": 50
-    }
   },
   {
     "number": 3990,
@@ -532,14 +424,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 82,
-      "sus": 65,
-      "tec": 83,
-      "pip": 57,
-      "med": 68,
-      "dat": 59
-    }
   },
   {
     "number": 6989,
@@ -558,14 +442,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 85,
-      "sus": 52,
-      "tec": 84,
-      "pip": 57,
-      "med": 72,
-      "dat": 80
-    }
   },
   {
     "number": 7525,
@@ -584,14 +460,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 57,
-      "sus": 79,
-      "tec": 55,
-      "pip": 64,
-      "med": 81,
-      "dat": 61
-    }
   },
   {
     "number": 1511,
@@ -612,14 +480,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 88,
-      "sus": 79,
-      "tec": 56,
-      "pip": 75,
-      "med": 65,
-      "dat": 74
-    }
   },
   {
     "number": 1156,
@@ -640,14 +500,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 58,
-      "sus": 73,
-      "tec": 62,
-      "pip": 87,
-      "med": 79,
-      "dat": 50
-    }
   },
   {
     "number": 3008,
@@ -666,18 +518,10 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 60,
-      "sus": 75,
-      "tec": 85,
-      "pip": 80,
-      "med": 63,
-      "dat": 54
-    }
   },
   {
-    "number": 64294,
-    "name": "th Dimension",
+    "number": 6429,
+    "name": "4th Dimension",
     "score": 90,
     "rank": 20,
     "tier": "Elite",
@@ -694,14 +538,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 79,
-      "sus": 81,
-      "tec": 69,
-      "pip": 51,
-      "med": 83,
-      "dat": 62
-    }
   },
   {
     "number": 1884,
@@ -720,14 +556,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 64,
-      "sus": 58,
-      "tec": 63,
-      "pip": 80,
-      "med": 73,
-      "dat": 86
-    }
   },
   {
     "number": 3354,
@@ -746,14 +574,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 85,
-      "sus": 73,
-      "tec": 55,
-      "pip": 81,
-      "med": 61,
-      "dat": 60
-    }
   },
   {
     "number": 422,
@@ -772,14 +592,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 53,
-      "sus": 54,
-      "tec": 85,
-      "pip": 59,
-      "med": 71,
-      "dat": 73
-    }
   },
   {
     "number": 1880,
@@ -800,14 +612,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 50,
-      "sus": 89,
-      "tec": 57,
-      "pip": 51,
-      "med": 50,
-      "dat": 50
-    }
   },
   {
     "number": 2905,
@@ -826,14 +630,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 50,
-      "sus": 68,
-      "tec": 56,
-      "pip": 81,
-      "med": 63,
-      "dat": 82
-    }
   },
   {
     "number": 3604,
@@ -852,14 +648,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 75,
-      "sus": 66,
-      "tec": 87,
-      "pip": 55,
-      "med": 73,
-      "dat": 86
-    }
   },
   {
     "number": 4201,
@@ -878,14 +666,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 66,
-      "sus": 86,
-      "tec": 57,
-      "pip": 77,
-      "med": 63,
-      "dat": 54
-    }
   },
   {
     "number": 6647,
@@ -904,14 +684,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 53,
-      "sus": 60,
-      "tec": 54,
-      "pip": 58,
-      "med": 78,
-      "dat": 72
-    }
   },
   {
     "number": 9545,
@@ -932,14 +704,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 50,
-      "sus": 66,
-      "tec": 52,
-      "pip": 50,
-      "med": 77,
-      "dat": 50
-    }
   },
   {
     "number": 461,
@@ -958,14 +722,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 64,
-      "sus": 73,
-      "tec": 88,
-      "pip": 76,
-      "med": 89,
-      "dat": 73
-    }
   },
   {
     "number": 4499,
@@ -984,14 +740,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 59,
-      "sus": 77,
-      "tec": 87,
-      "pip": 69,
-      "med": 52,
-      "dat": 62
-    }
   },
   {
     "number": 9692,
@@ -1010,14 +758,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 88,
-      "sus": 66,
-      "tec": 62,
-      "pip": 55,
-      "med": 86,
-      "dat": 59
-    }
   },
   {
     "number": 3937,
@@ -1036,14 +776,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 77,
-      "sus": 87,
-      "tec": 63,
-      "pip": 67,
-      "med": 64,
-      "dat": 78
-    }
   },
   {
     "number": 4256,
@@ -1062,14 +794,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 51,
-      "sus": 75,
-      "tec": 67,
-      "pip": 65,
-      "med": 55,
-      "dat": 62
-    }
   },
   {
     "number": 6352,
@@ -1090,14 +814,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 56,
-      "sus": 86,
-      "tec": 61,
-      "pip": 58,
-      "med": 56,
-      "dat": 61
-    }
   },
   {
     "number": 10002,
@@ -1116,14 +832,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 72,
-      "sus": 86,
-      "tec": 70,
-      "pip": 52,
-      "med": 67,
-      "dat": 86
-    }
   },
   {
     "number": 359,
@@ -1145,14 +853,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 82,
-      "sus": 85,
-      "tec": 87,
-      "pip": 86,
-      "med": 61,
-      "dat": 52
-    }
   },
   {
     "number": 1671,
@@ -1171,14 +871,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 55,
-      "sus": 63,
-      "tec": 71,
-      "pip": 89,
-      "med": 56,
-      "dat": 81
-    }
   },
   {
     "number": 4403,
@@ -1197,14 +889,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 77,
-      "sus": 87,
-      "tec": 58,
-      "pip": 58,
-      "med": 62,
-      "dat": 66
-    }
   },
   {
     "number": 10131,
@@ -1223,14 +907,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 79,
-      "sus": 73,
-      "tec": 84,
-      "pip": 61,
-      "med": 77,
-      "dat": 60
-    }
   },
   {
     "number": 3792,
@@ -1249,14 +925,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 74,
-      "sus": 70,
-      "tec": 72,
-      "pip": 85,
-      "med": 62,
-      "dat": 87
-    }
   },
   {
     "number": 5577,
@@ -1275,14 +943,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 83,
-      "sus": 80,
-      "tec": 67,
-      "pip": 72,
-      "med": 78,
-      "dat": 75
-    }
   },
   {
     "number": 9277,
@@ -1303,14 +963,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 85,
-      "sus": 85,
-      "tec": 50,
-      "pip": 61,
-      "med": 63,
-      "dat": 63
-    }
   },
   {
     "number": 589,
@@ -1329,14 +981,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 85,
-      "sus": 61,
-      "tec": 50,
-      "pip": 54,
-      "med": 72,
-      "dat": 56
-    }
   },
   {
     "number": 2399,
@@ -1355,14 +999,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 80,
-      "sus": 78,
-      "tec": 81,
-      "pip": 76,
-      "med": 55,
-      "dat": 62
-    }
   },
   {
     "number": 8020,
@@ -1381,14 +1017,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 57,
-      "sus": 59,
-      "tec": 56,
-      "pip": 57,
-      "med": 77,
-      "dat": 80
-    }
   },
   {
     "number": 195,
@@ -1407,14 +1035,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 59,
-      "sus": 58,
-      "tec": 83,
-      "pip": 56,
-      "med": 51,
-      "dat": 63
-    }
   },
   {
     "number": 2704,
@@ -1433,14 +1053,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 66,
-      "sus": 88,
-      "tec": 80,
-      "pip": 89,
-      "med": 61,
-      "dat": 51
-    }
   },
   {
     "number": 4188,
@@ -1459,14 +1071,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 73,
-      "sus": 66,
-      "tec": 77,
-      "pip": 74,
-      "med": 73,
-      "dat": 61
-    }
   },
   {
     "number": 6865,
@@ -1487,14 +1091,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 74,
-      "sus": 78,
-      "tec": 61,
-      "pip": 75,
-      "med": 82,
-      "dat": 63
-    }
   },
   {
     "number": 772,
@@ -1513,14 +1109,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 65,
-      "sus": 74,
-      "tec": 65,
-      "pip": 89,
-      "med": 85,
-      "dat": 50
-    }
   },
   {
     "number": 2826,
@@ -1539,14 +1127,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 59,
-      "sus": 53,
-      "tec": 58,
-      "pip": 85,
-      "med": 68,
-      "dat": 88
-    }
   },
   {
     "number": 4674,
@@ -1565,14 +1145,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 56,
-      "sus": 54,
-      "tec": 76,
-      "pip": 58,
-      "med": 79,
-      "dat": 84
-    }
   },
   {
     "number": 5653,
@@ -1591,14 +1163,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 74,
-      "sus": 57,
-      "tec": 80,
-      "pip": 77,
-      "med": 53,
-      "dat": 71
-    }
   },
   {
     "number": 245,
@@ -1617,14 +1181,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 73,
-      "sus": 71,
-      "tec": 84,
-      "pip": 54,
-      "med": 78,
-      "dat": 58
-    }
   },
   {
     "number": 4191,
@@ -1643,14 +1199,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 69,
-      "sus": 70,
-      "tec": 58,
-      "pip": 75,
-      "med": 58,
-      "dat": 84
-    }
   },
   {
     "number": 4561,
@@ -1669,14 +1217,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 78,
-      "sus": 59,
-      "tec": 62,
-      "pip": 75,
-      "med": 61,
-      "dat": 72
-    }
   },
   {
     "number": 7287,
@@ -1695,14 +1235,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 57,
-      "sus": 50,
-      "tec": 72,
-      "pip": 70,
-      "med": 82,
-      "dat": 87
-    }
   },
   {
     "number": 386,
@@ -1721,14 +1253,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 77,
-      "sus": 66,
-      "tec": 67,
-      "pip": 60,
-      "med": 83,
-      "dat": 86
-    }
   },
   {
     "number": 1477,
@@ -1747,14 +1271,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 53,
-      "sus": 70,
-      "tec": 80,
-      "pip": 62,
-      "med": 56,
-      "dat": 82
-    }
   },
   {
     "number": 6988,
@@ -1773,14 +1289,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 56,
-      "sus": 63,
-      "tec": 64,
-      "pip": 72,
-      "med": 76,
-      "dat": 79
-    }
   },
   {
     "number": 7451,
@@ -1799,14 +1307,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 59,
-      "sus": 73,
-      "tec": 61,
-      "pip": 68,
-      "med": 53,
-      "dat": 62
-    }
   },
   {
     "number": 1987,
@@ -1825,14 +1325,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 58,
-      "sus": 77,
-      "tec": 60,
-      "pip": 77,
-      "med": 66,
-      "dat": 55
-    }
   },
   {
     "number": 4125,
@@ -1851,14 +1343,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 51,
-      "sus": 84,
-      "tec": 77,
-      "pip": 65,
-      "med": 82,
-      "dat": 73
-    }
   },
   {
     "number": 5557,
@@ -1877,14 +1361,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 70,
-      "sus": 71,
-      "tec": 80,
-      "pip": 55,
-      "med": 89,
-      "dat": 68
-    }
   },
   {
     "number": 1902,
@@ -1905,14 +1381,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 74,
-      "sus": 83,
-      "tec": 80,
-      "pip": 68,
-      "med": 68,
-      "dat": 71
-    }
   },
   {
     "number": 3620,
@@ -1931,14 +1399,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 71,
-      "sus": 64,
-      "tec": 66,
-      "pip": 86,
-      "med": 77,
-      "dat": 73
-    }
   },
   {
     "number": 4905,
@@ -1957,14 +1417,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 60,
-      "sus": 88,
-      "tec": 66,
-      "pip": 51,
-      "med": 73,
-      "dat": 67
-    }
   },
   {
     "number": 8575,
@@ -1983,14 +1435,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 68,
-      "sus": 81,
-      "tec": 65,
-      "pip": 86,
-      "med": 50,
-      "dat": 51
-    }
   },
   {
     "number": 3544,
@@ -2009,14 +1453,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 86,
-      "sus": 52,
-      "tec": 81,
-      "pip": 87,
-      "med": 84,
-      "dat": 59
-    }
   },
   {
     "number": 4450,
@@ -2035,14 +1471,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 72,
-      "sus": 85,
-      "tec": 84,
-      "pip": 59,
-      "med": 81,
-      "dat": 67
-    }
   },
   {
     "number": 1108,
@@ -2061,14 +1489,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 88,
-      "sus": 57,
-      "tec": 58,
-      "pip": 88,
-      "med": 55,
-      "dat": 77
-    }
   },
   {
     "number": 1710,
@@ -2087,14 +1507,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 78,
-      "sus": 51,
-      "tec": 77,
-      "pip": 83,
-      "med": 66,
-      "dat": 57
-    }
   },
   {
     "number": 3284,
@@ -2115,14 +1527,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 82,
-      "sus": 88,
-      "tec": 78,
-      "pip": 51,
-      "med": 87,
-      "dat": 89
-    }
   },
   {
     "number": 4122,
@@ -2141,14 +1545,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 73,
-      "sus": 84,
-      "tec": 61,
-      "pip": 56,
-      "med": 75,
-      "dat": 70
-    }
   },
   {
     "number": 6940,
@@ -2167,14 +1563,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 80,
-      "sus": 58,
-      "tec": 51,
-      "pip": 57,
-      "med": 51,
-      "dat": 75
-    }
   },
   {
     "number": 3630,
@@ -2193,14 +1581,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 89,
-      "sus": 71,
-      "tec": 57,
-      "pip": 59,
-      "med": 51,
-      "dat": 55
-    }
   },
   {
     "number": 2199,
@@ -2219,14 +1599,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 54,
-      "sus": 77,
-      "tec": 69,
-      "pip": 78,
-      "med": 55,
-      "dat": 88
-    }
   },
   {
     "number": 1403,
@@ -2245,14 +1617,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 50,
-      "sus": 67,
-      "tec": 55,
-      "pip": 64,
-      "med": 88,
-      "dat": 68
-    }
   },
   {
     "number": 9067,
@@ -2271,14 +1635,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 70,
-      "sus": 72,
-      "tec": 87,
-      "pip": 56,
-      "med": 78,
-      "dat": 88
-    }
   },
   {
     "number": 7028,
@@ -2297,14 +1653,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 89,
-      "sus": 69,
-      "tec": 61,
-      "pip": 62,
-      "med": 51,
-      "dat": 85
-    }
   },
   {
     "number": 3880,
@@ -2323,14 +1671,6 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 71,
-      "sus": 74,
-      "tec": 62,
-      "pip": 54,
-      "med": 63,
-      "dat": 69
-    }
   },
   {
     "number": 9449,
@@ -2349,23 +1689,20 @@ const RAW_TEAMS: Team[] = [
     "critique": "A solid team with room to grow.",
     "prediction": "Will perform adequately.",
     "counterPlay": "Standard strategy applies.",
-    "stats": {
-      "out": 75,
-      "sus": 88,
-      "tec": 81,
-      "pip": 81,
-      "med": 87,
-      "dat": 56
-    }
   }
 ];
 
+const radarPercentiles = computeRadarPercentiles(RAW_TEAMS.map((t) => t.number));
+
 // Ranks are derived from score so the leaderboard can never show duplicate or missing
 // positions. Ties keep the hand-curated order (original rank, then team number).
-// Performance stats are resolved once here instead of on every render.
+// Performance stats are resolved once here instead of on every render: real TBA results
+// override the modelled record/OPR, and the radar comes from real-data percentiles.
 export const mockTeams: Team[] = [...RAW_TEAMS]
   .sort((a, b) => b.score - a.score || a.rank - b.rank || a.number - b.number)
   .map((team, idx) => {
-    const ranked = { ...team, rank: idx + 1 };
-    return { ...ranked, frcStats: ranked.frcStats || getEnhancedTeamStats(ranked) };
+    const real = getRealMetrics(team.number);
+    const stats = radarPercentiles.get(team.number)!;
+    const ranked: Team = { ...team, rank: idx + 1, stats, location: team.location ?? real?.location ?? undefined };
+    return { ...ranked, frcStats: applyRealStats(getEnhancedTeamStats(ranked), real, stats.opr) };
   });

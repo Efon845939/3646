@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Search, Swords, Scale, Cpu, Gauge, Trophy } from 'lucide-react';
-import { Team, mockTeams, STAT_META, getEnhancedTeamStats } from '../data';
+import { Team, mockTeams, STAT_META } from '../data';
+import { formatRecord, getRealMetrics, REAL_DATA_YEAR, winRateOf } from '../utils/realMetrics';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 interface TeamCompareProps {
@@ -33,27 +34,20 @@ export function TeamCompare({
       .slice(0, 5);
   }, [searchQuery, teams]);
 
-  const chartData: Array<{ subject: string; fullName: string; [key: string]: any }> = [
-    { subject: 'OUT', fullName: STAT_META.out.fullName },
-    { subject: 'SUS', fullName: STAT_META.sus.fullName },
-    { subject: 'TEC', fullName: STAT_META.tec.fullName },
-    { subject: 'PIP', fullName: STAT_META.pip.fullName },
-    { subject: 'MED', fullName: STAT_META.med.fullName },
-    { subject: 'DAT', fullName: STAT_META.dat.fullName },
-  ];
-
-  chartData.forEach((cd) => {
+  const chartData = (Object.keys(STAT_META) as Array<keyof typeof STAT_META>).map((key) => {
+    const row: { subject: string; fullName: string; [series: string]: string | number } = {
+      subject: STAT_META[key].label,
+      fullName: STAT_META[key].fullName,
+    };
     teams.forEach((t, index) => {
-      cd[`Team${index}`] = t.stats[cd.subject.toLowerCase() as keyof typeof t.stats];
+      row[`Team${index}`] = t.stats[key];
     });
+    return row;
   });
 
   const colors = ['#FEDE00', '#38BDF8', '#F43F5E', '#10B981'];
 
-  const teamsWithStats = teams.map((team) => ({
-    team,
-    stats: team.frcStats || getEnhancedTeamStats(team),
-  }));
+  const teamsWithStats = teams.map((team) => ({ team, real: getRealMetrics(team.number) }));
 
   return (
     <div className="flex flex-col h-full bg-surface border border-border-main rounded-xl p-5 sm:p-6 transition-colors duration-300">
@@ -63,8 +57,8 @@ export function TeamCompare({
           <h2 className="text-2xl font-black font-montserrat uppercase text-text-main">
             Head-to-Head Team Comparison
           </h2>
-          <p className="text-xs text-text-muted mt-0.5">
-            Compare up to 4 teams across Statbotics EPA, TBA power ratings, and pit scouting specifications.
+          <p className="text-sm text-text-muted mt-1">
+            Compare up to 4 teams on real {REAL_DATA_YEAR} results from The Blue Alliance.
           </p>
         </div>
 
@@ -88,7 +82,7 @@ export function TeamCompare({
             className="px-3.5 py-2 bg-surface-hover text-text-muted hover:text-text-main rounded-lg border border-border-main transition-colors text-xs font-bold uppercase flex items-center gap-2"
           >
             <span>Dashboard</span>
-            <kbd className="text-[10px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
+            <kbd className="text-xs font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
               Esc
             </kbd>
           </button>
@@ -97,7 +91,7 @@ export function TeamCompare({
 
       {/* Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pb-4">
-        {teamsWithStats.map(({ team, stats }, index) => (
+        {teamsWithStats.map(({ team, real }, index) => (
           <div
             key={team.number}
             className="border border-border-main rounded-xl p-4 relative flex flex-col justify-between bg-bg-dark"
@@ -119,62 +113,25 @@ export function TeamCompare({
                   #{team.number}
                 </div>
                 <div className="flex flex-col min-w-0 pr-6">
-                  <span className="text-xs font-bold uppercase text-text-main truncate">
+                  <span className="text-sm font-bold uppercase text-text-main truncate">
                     {team.name}
                   </span>
-                  <span className="text-[10px] font-mono text-text-muted">
+                  <span className="text-xs font-mono text-text-muted">
                     Rank #{team.rank} • {team.tier}
                   </span>
                 </div>
               </div>
 
-              {/* Core Metrics */}
-              <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-border-main/60 text-xs">
-                <div className="p-2 bg-surface rounded border border-border-main/50">
-                  <span className="text-[9px] uppercase font-bold text-text-muted block">Scout Score</span>
-                  <span className="text-lg font-black font-montserrat text-accent">
-                    {team.score}
-                  </span>
-                </div>
-
-                <div className="p-2 bg-surface rounded border border-border-main/50">
-                  <span className="text-[9px] uppercase font-bold text-text-muted block">Statbotics EPA</span>
-                  <span className="text-lg font-mono font-bold text-text-main">
-                    {stats.epa.total}
-                  </span>
-                </div>
-
-                <div className="p-2 bg-surface rounded border border-border-main/50">
-                  <span className="text-[9px] uppercase font-bold text-text-muted block">OPR / DPR</span>
-                  <span className="text-xs font-mono font-bold text-text-main">
-                    {stats.opr} / {stats.dpr}
-                  </span>
-                </div>
-
-                <div className="p-2 bg-surface rounded border border-border-main/50">
-                  <span className="text-[9px] uppercase font-bold text-text-muted block">Win Rate</span>
-                  <span className="text-xs font-mono font-bold text-accent">
-                    {stats.record.winRate}% ({stats.record.wins}W-{stats.record.losses}L)
-                  </span>
-                </div>
-              </div>
-
-              {/* Specs */}
-              <div className="mt-3 p-2 bg-surface rounded border border-border-main/50 text-[10px] space-y-1">
-                <div className="text-text-main/80 font-mono truncate">
-                  <span className="text-text-muted">Drive:</span> {stats.specs.drivetrain}
-                </div>
-                <div className="text-text-main/80 font-mono truncate">
-                  <span className="text-text-muted">Motors:</span> {stats.specs.driveMotors}
-                </div>
-                <div className="text-text-main/80 font-mono truncate">
-                  <span className="text-text-muted">Climb:</span> {stats.cycles.climbType} ({stats.cycles.climbSuccessPct}%)
-                </div>
+              {/* Core metrics: Pre-PR score plus real TBA results */}
+              <div className="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-border-main/60">
+                <CompareStat label="Pre-PR Score" value={team.score} accent />
+                <CompareStat label="Best OPR" value={real?.bestOpr ?? '—'} />
+                <CompareStat label="Record" value={formatRecord(real?.record ?? null)} />
+                <CompareStat label="Win Rate" value={`${winRateOf(real?.record ?? null) ?? '—'}%`} />
               </div>
             </div>
 
-            {/* Prediction snippet */}
-            <div className="mt-3 pt-2 border-t border-border-main/50 text-[10px] text-text-muted italic line-clamp-2">
+            <div className="mt-3 pt-2 border-t border-border-main/50 text-sm text-text-muted italic line-clamp-2">
               "{team.critique}"
             </div>
           </div>
@@ -274,6 +231,15 @@ export function TeamCompare({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CompareStat({ label, value, accent = false }: { label: string; value: React.ReactNode; accent?: boolean }) {
+  return (
+    <div className="p-2.5 bg-surface rounded-lg border border-border-main/50">
+      <span className="text-xs uppercase font-bold text-text-muted block">{label}</span>
+      <span className={`text-lg font-mono font-bold ${accent ? 'text-accent' : 'text-text-main'}`}>{value}</span>
     </div>
   );
 }

@@ -1,5 +1,6 @@
-import { Team, getEnhancedTeamStats } from '../data';
+import { Team, STAT_META } from '../data';
 import { readScoutNotes } from './storage';
+import { getRealMetrics, winRateOf } from './realMetrics';
 
 export type CsvCell = string | number | boolean | null | undefined;
 
@@ -30,27 +31,26 @@ export function datedFilename(prefix: string): string {
   return `${prefix}-${new Date().toISOString().slice(0, 10)}.csv`;
 }
 
+// Only real (TBA) numbers and the team's own scouting text are exported; modelled pit specs
+// and simulator ratings stay out of spreadsheets.
 export function buildTeamsCsv(teams: Team[]): CsvCell[][] {
   const header = [
     'Rank', 'Team', 'Name', 'Location', 'Tier', 'Pre-PR Score',
-    'OUT', 'SUS', 'TEC', 'PIP', 'MED', 'DAT',
-    'EPA Total', 'EPA Auto', 'EPA Teleop', 'EPA Endgame', 'EPA Percentile',
-    'OPR', 'DPR', 'CCWM', 'Wins', 'Losses', 'Ties', 'Win %', 'Avg RP',
-    'Avg Cycles', 'Cycle Time (s)', 'Accuracy %', 'Climb', 'Climb Success %',
-    'Drivetrain', 'Drive Motors', 'Vision', 'Tags',
-    'Pros', 'Cons', 'Critique', 'Prediction', 'Counter Play', 'Scout Notes',
+    'Wins', 'Losses', 'Ties', 'Win %', 'Best OPR', 'Best Event Rank', '2026 Awards', '2026 Event Wins',
+    'Impact Wins (all years)', 'Rookie Year', 'Events 2026',
+    ...Object.values(STAT_META).map((m) => `${m.label} pct`),
+    'Tags', 'Pros', 'Cons', 'Critique', 'Prediction', 'Counter Play', 'Scout Notes',
   ];
 
   const rows = teams.map((t) => {
-    const s = t.frcStats ?? getEnhancedTeamStats(t);
+    const real = getRealMetrics(t.number);
     return [
       t.rank, t.number, t.name, t.location, t.tier, t.score,
-      t.stats.out, t.stats.sus, t.stats.tec, t.stats.pip, t.stats.med, t.stats.dat,
-      s.epa.total, s.epa.auto, s.epa.teleop, s.epa.endgame, s.epa.percentile,
-      s.opr, s.dpr, s.ccwm, s.record.wins, s.record.losses, s.record.ties, s.record.winRate, s.rpContribution.avgRP,
-      s.cycles.avgTeleopCycles, s.cycles.avgCycleTimeSec, s.cycles.scoringAccuracyPct, s.cycles.climbType, s.cycles.climbSuccessPct,
-      s.specs.drivetrain, s.specs.driveMotors, s.specs.visionSystem, t.tags.join('; '),
-      t.pros.join('; '), t.cons.join('; '), t.critique, t.prediction, t.counterPlay, readScoutNotes(t.number),
+      real?.record?.[0], real?.record?.[1], real?.record?.[2], winRateOf(real?.record ?? null),
+      real?.bestOpr, real?.bestEventRank, real?.awards2026, real?.eventWins2026,
+      real?.impactWins, real?.rookieYear, real?.events.map((e) => `${e.name} (#${e.rank ?? '-'})`).join('; '),
+      ...(Object.keys(STAT_META) as Array<keyof typeof STAT_META>).map((k) => t.stats[k]),
+      t.tags.join('; '), t.pros.join('; '), t.cons.join('; '), t.critique, t.prediction, t.counterPlay, readScoutNotes(t.number),
     ];
   });
 

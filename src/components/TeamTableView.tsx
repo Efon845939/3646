@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Team, getEnhancedTeamStats } from '../data';
+import { Team } from '../data';
 import { PICKLIST_LANE_META, PicklistLane } from '../hooks/usePicklist';
-import { ArrowUpDown, Scale, Swords, CheckSquare, Eye, ExternalLink } from 'lucide-react';
+import { ArrowUpDown, Scale, Swords, CheckSquare } from 'lucide-react';
+import { HOST_TEAM_NUMBER } from '../utils/quickFilters';
+import { formatRecord, getRealMetrics, winRateOf } from '../utils/realMetrics';
 
 interface TeamTableViewProps {
   teams: Team[];
@@ -12,17 +14,19 @@ interface TeamTableViewProps {
   laneByTeam?: Map<number, PicklistLane>;
 }
 
-type TableSortKey =
-  | 'rank'
-  | 'number'
-  | 'score'
-  | 'epa_total'
-  | 'epa_auto'
-  | 'epa_teleop'
-  | 'opr'
-  | 'dpr'
-  | 'winRate'
-  | 'cycles';
+type TableSortKey = 'rank' | 'number' | 'score' | 'opr' | 'winRate' | 'bestRank' | 'awards';
+
+interface Row {
+  team: Team;
+  opr: number | null;
+  record: [number, number, number] | null;
+  winRate: number | null;
+  bestRank: number | null;
+  awards: number | null;
+}
+
+// Keys where a smaller number is better, so their first click sorts ascending.
+const LOWER_IS_BETTER: TableSortKey[] = ['rank', 'bestRank', 'number'];
 
 export function TeamTableView({
   teams,
@@ -32,285 +36,160 @@ export function TeamTableView({
   onOpenSimulator,
   laneByTeam,
 }: TeamTableViewProps) {
-  const [sortKey, setSortKey] = useState<TableSortKey>('score');
-  const [sortAsc, setSortAsc] = useState(false);
+  const [sortKey, setSortKey] = useState<TableSortKey>('rank');
+  const [sortAsc, setSortAsc] = useState(true);
 
-  const teamsWithStats = useMemo(() => {
-    return teams.map((team) => ({
-      team,
-      stats: team.frcStats || getEnhancedTeamStats(team),
-    }));
-  }, [teams]);
+  const rows = useMemo<Row[]>(
+    () =>
+      teams.map((team) => {
+        const real = getRealMetrics(team.number);
+        return {
+          team,
+          opr: real?.bestOpr ?? null,
+          record: real?.record ?? null,
+          winRate: winRateOf(real?.record ?? null),
+          bestRank: real?.bestEventRank ?? null,
+          awards: real?.awards2026 ?? null,
+        };
+      }),
+    [teams]
+  );
 
   const handleSort = (key: TableSortKey) => {
     if (sortKey === key) {
       setSortAsc(!sortAsc);
     } else {
       setSortKey(key);
-      setSortAsc(false);
+      setSortAsc(LOWER_IS_BETTER.includes(key));
     }
   };
 
-  const sortedTeams = useMemo(() => {
-    const list = [...teamsWithStats];
-    list.sort((a, b) => {
-      let valA = 0;
-      let valB = 0;
-
+  const sortedRows = useMemo(() => {
+    const valueOf = (r: Row): number | null => {
       switch (sortKey) {
         case 'rank':
-          valA = a.team.rank;
-          valB = b.team.rank;
-          break;
+          return r.team.rank;
         case 'number':
-          valA = a.team.number;
-          valB = b.team.number;
-          break;
+          return r.team.number;
         case 'score':
-          valA = a.team.score;
-          valB = b.team.score;
-          break;
-        case 'epa_total':
-          valA = a.stats.epa.total;
-          valB = b.stats.epa.total;
-          break;
-        case 'epa_auto':
-          valA = a.stats.epa.auto;
-          valB = b.stats.epa.auto;
-          break;
-        case 'epa_teleop':
-          valA = a.stats.epa.teleop;
-          valB = b.stats.epa.teleop;
-          break;
-        case 'opr':
-          valA = a.stats.opr;
-          valB = b.stats.opr;
-          break;
-        case 'dpr':
-          valA = a.stats.dpr;
-          valB = b.stats.dpr;
-          break;
-        case 'winRate':
-          valA = a.stats.record.winRate;
-          valB = b.stats.record.winRate;
-          break;
-        case 'cycles':
-          valA = a.stats.cycles.avgTeleopCycles;
-          valB = b.stats.cycles.avgTeleopCycles;
-          break;
+          return r.team.score;
+        default:
+          return r[sortKey];
       }
-
-      return sortAsc ? valA - valB : valB - valA;
+    };
+    // Missing values always sink to the bottom, whichever direction is chosen.
+    return [...rows].sort((a, b) => {
+      const va = valueOf(a);
+      const vb = valueOf(b);
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      return sortAsc ? va - vb : vb - va;
     });
-    return list;
-  }, [teamsWithStats, sortKey, sortAsc]);
+  }, [rows, sortKey, sortAsc]);
 
-  const SortHeader = ({
-    colKey,
-    label,
-    tooltip,
-    className = '',
-  }: {
-    colKey: TableSortKey;
-    label: string;
-    tooltip?: string;
-    className?: string;
-  }) => (
+  const SortHeader = ({ colKey, label, tooltip, align = 'right' }: { colKey: TableSortKey; label: string; tooltip?: string; align?: 'left' | 'right' }) => (
     <th
       onClick={() => handleSort(colKey)}
-      className={`py-3 px-2.5 cursor-pointer select-none text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-main transition-colors ${className}`}
+      aria-sort={sortKey === colKey ? (sortAsc ? 'ascending' : 'descending') : 'none'}
+      className={`py-3.5 px-3 cursor-pointer select-none text-xs font-bold uppercase tracking-wider text-text-muted hover:text-text-main transition-colors ${
+        align === 'right' ? 'text-right' : 'text-left'
+      }`}
       title={tooltip || `Sort by ${label}`}
     >
-      <div className="flex items-center gap-1.5">
+      <span className={`inline-flex items-center gap-1.5 ${align === 'right' ? 'flex-row-reverse' : ''}`}>
         <span>{label}</span>
-        <ArrowUpDown
-          className={`w-3 h-3 ${sortKey === colKey ? 'text-accent opacity-100' : 'opacity-30'}`}
-        />
-      </div>
+        <ArrowUpDown className={`w-3.5 h-3.5 ${sortKey === colKey ? 'text-accent opacity-100' : 'opacity-30'}`} />
+      </span>
     </th>
   );
 
   return (
-    <div className="w-full bg-surface border border-border-main rounded-xl overflow-hidden shadow-lg">
+    <div className="w-full bg-surface border border-border-main rounded-2xl overflow-hidden shadow-lg">
       {/* The scroll container owns the sticky header, so column labels stay visible across all rows. */}
       <div className="overflow-auto max-h-[calc(100vh-12rem)]">
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-bg-dark border-b border-border-main shadow-sm">
-              <th className="py-3 px-3 text-[11px] font-bold uppercase text-text-muted w-10 text-center">
-                CMP
-              </th>
-              <SortHeader colKey="rank" label="Rank" />
-              <SortHeader colKey="number" label="Team #" />
-              <th className="py-3 px-3 text-[11px] font-bold uppercase text-text-muted">
-                Team Name & Drivetrain
-              </th>
-              <SortHeader colKey="score" label="Score" tooltip="Pre-PR Overall Scout Score" />
-              <SortHeader colKey="epa_total" label="EPA Total" tooltip="Statbotics Expected Points Added" />
-              <SortHeader colKey="epa_auto" label="Auto EPA" />
-              <SortHeader colKey="epa_teleop" label="Teleop EPA" />
-              <SortHeader colKey="opr" label="OPR" tooltip="Offensive Power Rating" />
-              <SortHeader colKey="dpr" label="DPR" tooltip="Defensive Power Rating (Lower is better)" />
-              <SortHeader colKey="winRate" label="Win %" tooltip="Verified Match Win Rate" />
-              <SortHeader colKey="cycles" label="Cycles" tooltip="Average Teleop Game Piece Cycles" />
-              <th className="py-3 px-3 text-[11px] font-bold uppercase text-text-muted text-right">
-                Actions
-              </th>
+              <th className="py-3.5 px-3 w-12" aria-label="Compare" />
+              <SortHeader colKey="rank" label="Rank" align="left" />
+              <SortHeader colKey="number" label="Team" align="left" />
+              <SortHeader colKey="score" label="Pre-PR" tooltip="Pre-PR Impact ranking score" />
+              <SortHeader colKey="opr" label="Best OPR" tooltip="Best 2026 event OPR (from qualification match scores)" />
+              <th className="py-3.5 px-3 text-right text-xs font-bold uppercase tracking-wider text-text-muted">Record</th>
+              <SortHeader colKey="winRate" label="Win %" tooltip="2026 official win rate" />
+              <SortHeader colKey="bestRank" label="Best Rank" tooltip="Best qualification rank at a 2026 event" />
+              <SortHeader colKey="awards" label="Awards" tooltip="Awards won at 2026 events" />
+              <th className="py-3.5 px-3 w-16" aria-label="Simulate" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-main/50 text-xs font-mono">
-            {sortedTeams.map(({ team, stats }, idx) => {
+          <tbody className="divide-y divide-border-main/60 text-sm">
+            {sortedRows.map(({ team, opr, record, winRate, bestRank, awards }) => {
               const isSelected = selectedCompareTeams.some((t) => t.number === team.number);
+              const lane = laneByTeam?.get(team.number);
 
               return (
                 <tr
                   key={team.number}
                   onClick={() => onSelectTeam(team)}
-                  className={`hover:bg-surface-hover/80 transition-colors cursor-pointer group ${
-                    isSelected ? 'bg-integra-yellow/5' : idx % 2 === 0 ? 'bg-transparent' : 'bg-bg-dark/30'
-                  }`}
+                  className={`hover:bg-surface-hover transition-colors cursor-pointer group ${isSelected ? 'bg-integra-yellow/5' : ''}`}
                 >
-                  {/* Compare Checkbox */}
-                  <td
-                    className="py-2.5 px-2.5 text-center"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleCompare(team);
-                    }}
-                  >
+                  <td className="py-3.5 px-3 text-center">
                     <button
                       type="button"
-                      className={`p-1 rounded transition-colors ${
-                        isSelected
-                          ? 'text-accent'
-                          : 'text-text-muted hover:text-text-main opacity-60 hover:opacity-100'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleCompare(team);
+                      }}
+                      aria-pressed={isSelected}
+                      aria-label={isSelected ? `Remove #${team.number} from compare` : `Add #${team.number} to compare`}
+                      className={`p-1.5 rounded-lg transition-colors ${
+                        isSelected ? 'text-accent' : 'text-text-muted hover:text-text-main'
                       }`}
-                      title={isSelected ? 'Remove from compare' : 'Select for compare'}
                     >
-                      {isSelected ? (
-                        <CheckSquare className="w-4 h-4 text-accent" />
-                      ) : (
-                        <Scale className="w-4 h-4" />
-                      )}
+                      {isSelected ? <CheckSquare className="w-5 h-5" /> : <Scale className="w-5 h-5" />}
                     </button>
                   </td>
 
-                  {/* Rank */}
-                  <td className="py-2.5 px-2.5 font-bold text-text-muted">
-                    #{team.rank}
+                  <td className="py-3.5 px-3 font-mono font-bold text-text-muted">#{team.rank}</td>
+
+                  <td className="py-3.5 px-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={`font-black font-montserrat text-lg px-1.5 rounded ${
+                          team.number === HOST_TEAM_NUMBER ? 'bg-integra-yellow text-[#111111]' : 'text-text-main'
+                        }`}
+                      >
+                        #{team.number}
+                      </span>
+                      <span className="font-semibold text-text-main group-hover:text-accent transition-colors truncate max-w-[260px]">
+                        {team.name}
+                      </span>
+                      {lane && (
+                        <span className={`text-xs px-2 py-0.5 rounded-md border font-bold uppercase shrink-0 ${PICKLIST_LANE_META[lane].badgeClass}`}>
+                          {PICKLIST_LANE_META[lane].short}
+                        </span>
+                      )}
+                    </div>
                   </td>
 
-                  {/* Team Number */}
-                  <td className="py-2.5 px-2.5">
-                    <span
-                      className={`font-black font-montserrat text-sm px-1.5 py-0.5 rounded ${
-                        team.number === 3646
-                          ? 'bg-integra-yellow text-[#111111]'
-                          : 'text-text-main group-hover:text-accent transition-colors'
-                      }`}
+                  <td className="py-3.5 px-3 text-right font-mono font-bold text-text-main">{team.score}</td>
+                  <td className="py-3.5 px-3 text-right font-mono font-bold text-accent">{opr ?? '—'}</td>
+                  <td className="py-3.5 px-3 text-right font-mono text-text-main">{formatRecord(record)}</td>
+                  <td className="py-3.5 px-3 text-right font-mono text-text-main">{winRate === null ? '—' : `${winRate}%`}</td>
+                  <td className="py-3.5 px-3 text-right font-mono text-text-main">{bestRank === null ? '—' : `#${bestRank}`}</td>
+                  <td className="py-3.5 px-3 text-right font-mono text-text-main">{awards ?? '—'}</td>
+
+                  <td className="py-3.5 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenSimulator(team)}
+                      className="px-2.5 py-1.5 rounded-lg bg-bg-dark hover:bg-surface-hover text-accent border border-integra-yellow/40 hover:border-integra-yellow transition-colors text-xs font-bold uppercase inline-flex items-center gap-1.5"
+                      title="Simulate a match against this team"
                     >
-                      #{team.number}
-                    </span>
-                  </td>
-
-                  {/* Name & Drivetrain */}
-                  <td className="py-2.5 px-2.5 font-sans">
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-text-main group-hover:text-accent transition-colors">
-                          {team.name}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-bg-dark border border-border-main text-accent font-mono uppercase">
-                          {team.tier}
-                        </span>
-                        {laneByTeam?.has(team.number) && (
-                          <span
-                            className={`text-[9px] px-1.5 py-0.2 rounded border font-mono font-bold uppercase ${
-                              PICKLIST_LANE_META[laneByTeam.get(team.number)!].badgeClass
-                            }`}
-                          >
-                            {PICKLIST_LANE_META[laneByTeam.get(team.number)!].short}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-text-muted font-mono truncate max-w-[240px]">
-                        {stats.specs.drivetrain} • {stats.specs.driveMotors}
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* Score */}
-                  <td className="py-2.5 px-2.5">
-                    <span className="font-black text-accent text-sm">
-                      {team.score}
-                    </span>
-                  </td>
-
-                  {/* Total EPA */}
-                  <td className="py-2.5 px-2.5 font-bold text-accent">
-                    {stats.epa.total}
-                  </td>
-
-                  {/* Auto EPA */}
-                  <td className="py-2.5 px-2.5 text-text-main font-medium">
-                    {stats.epa.auto}
-                  </td>
-
-                  {/* Teleop EPA */}
-                  <td className="py-2.5 px-2.5 text-text-main/80 font-medium">
-                    {stats.epa.teleop}
-                  </td>
-
-                  {/* OPR */}
-                  <td className="py-2.5 px-2.5 font-semibold text-text-main">
-                    {stats.opr}
-                  </td>
-
-                  {/* DPR */}
-                  <td className="py-2.5 px-2.5 text-text-muted">
-                    {stats.dpr}
-                  </td>
-
-                  {/* Win Rate */}
-                  <td className="py-2.5 px-2.5">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-accent">{stats.record.winRate}%</span>
-                      <span className="text-[9px] text-text-muted">
-                        {stats.record.wins}W-{stats.record.losses}L
-                      </span>
-                    </div>
-                  </td>
-
-                  {/* Cycles */}
-                  <td className="py-2.5 px-2.5 text-text-main/80">
-                    <span>{stats.cycles.avgTeleopCycles}</span>
-                    <span className="text-[9px] text-text-muted ml-1">({stats.cycles.avgCycleTimeSec}s)</span>
-                  </td>
-
-                  {/* Actions */}
-                  <td
-                    className="py-2.5 px-2.5 text-right"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center justify-end gap-1.5 font-sans">
-                      <button
-                        type="button"
-                        onClick={() => onSelectTeam(team)}
-                        className="p-1.5 rounded bg-bg-dark hover:bg-surface-hover text-text-muted hover:text-text-main border border-border-main transition-colors"
-                        title="View Full Scouting Breakdown"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onOpenSimulator(team)}
-                        className="px-2 py-1 rounded bg-bg-dark hover:bg-surface-hover text-accent border border-integra-yellow/40 hover:border-integra-yellow transition-colors text-[10px] font-bold uppercase flex items-center gap-1"
-                        title="Simulate Match in Arena"
-                      >
-                        <Swords className="w-3 h-3" />
-                        <span>Sim</span>
-                      </button>
-                    </div>
+                      <Swords className="w-3.5 h-3.5" />
+                      Sim
+                    </button>
                   </td>
                 </tr>
               );

@@ -4,8 +4,10 @@
 //   - history pages: every award the team has won, all years
 //   - event pages:   qualification match scores, used to compute each team's OPR
 //
-// Usage:  node scripts/fetch-tba.mjs [year]
+// Usage:  node scripts/fetch-tba.mjs [year]                 refresh every team in src/data.ts
+//         node scripts/fetch-tba.mjs [year] 3646 1678       refresh only these teams, merged in
 // (behind an HTTPS proxy on Node >= 22.21, run with NODE_USE_ENV_PROXY=1)
+// After fetching, run `node scripts/build-team-metrics.mjs` to refresh the app's data file.
 //
 // Requests are sequential with a pause between them to stay polite to TBA.
 // For live data during events, switch to the official TBA API with a free read key.
@@ -164,10 +166,22 @@ function computeOpr(matches) {
 
 async function main() {
   const dataTs = await fs.readFile(path.join(ROOT, 'src', 'data.ts'), 'utf8');
-  const teamNumbers = [...new Set([...dataTs.matchAll(/"number": (\d+)/g)].map((m) => Number(m[1])))];
+  const listed = [...new Set([...dataTs.matchAll(/"number": (\d+)/g)].map((m) => Number(m[1])))];
+  const requested = process.argv.slice(3).map(Number).filter(Boolean);
+  const teamNumbers = requested.length ? requested : listed;
   console.log(`Fetching ${teamNumbers.length} teams for ${YEAR}…`);
 
-  const teams = {};
+  // A partial refresh starts from the existing snapshot; teams no longer listed are dropped.
+  let teams = {};
+  if (requested.length) {
+    try {
+      teams = JSON.parse(await fs.readFile(OUT_FILE, 'utf8')).teams;
+    } catch {
+      teams = {};
+    }
+  }
+  teams = Object.fromEntries(Object.entries(teams).filter(([n]) => listed.includes(Number(n))));
+
   for (const [i, number] of teamNumbers.entries()) {
     const teamHtml = await fetchPage(`${BASE}/team/${number}/${YEAR}`);
     await sleep(DELAY_MS);
@@ -181,7 +195,9 @@ async function main() {
     console.log(`[${i + 1}/${teamNumbers.length}] ${number}: ${teams[number].events.length} events, ${teams[number].awards.length} awards`);
   }
 
-  const eventKeys = [...new Set(Object.values(teams).flatMap((t) => t.events.map((e) => e.key)))].sort();
+  const eventKeys = [
+    ...new Set(teamNumbers.flatMap((n) => teams[n].events.map((e) => e.key))),
+  ].sort();
   console.log(`Fetching ${eventKeys.length} events for OPR…`);
   const eventOpr = {};
   for (const [i, key] of eventKeys.entries()) {
@@ -193,7 +209,8 @@ async function main() {
     console.log(`[${i + 1}/${eventKeys.length}] ${key}: ${matches.length} qual matches`);
   }
 
-  for (const team of Object.values(teams)) {
+  for (const number of teamNumbers) {
+    const team = teams[number];
     for (const event of team.events) {
       event.qualMatches = eventOpr[event.key]?.qualMatches ?? 0;
       event.opr = eventOpr[event.key]?.opr.get(team.number) ?? null;

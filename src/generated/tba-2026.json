@@ -1,7 +1,7 @@
 {
   "source": "The Blue Alliance public team, history and event pages (thebluealliance.com)",
   "year": 2026,
-  "fetchedAt": "2026-09-24T19:55:48.604Z",
+  "fetchedAt": "2026-09-25T15:00:14.187Z",
   "teams": {
     "118": {
       "number": 118,
@@ -23584,6 +23584,228 @@
         }
       ]
     },
+    "6429": {
+      "number": 6429,
+      "nickname": "4th Dimension",
+      "location": "BORNOVA, Izmir, Türkiye",
+      "rookieYear": 2017,
+      "record": {
+        "wins": 11,
+        "losses": 11,
+        "ties": 0
+      },
+      "pool": {
+        "name": "Regional Championship Pool",
+        "rank": 16,
+        "points": 160
+      },
+      "events": [
+        {
+          "key": "2026tuhc",
+          "name": "Haliç Regional",
+          "rank": 6,
+          "wins": 8,
+          "losses": 4,
+          "ties": 0,
+          "awards": [
+            "Regional FIRST Impact Award"
+          ],
+          "playoff": "as the 1st Pick of Alliance 2 and were eliminated in the Double Elimination Bracket (Round 5)",
+          "qualMatches": 51,
+          "opr": 148.3
+        },
+        {
+          "key": "2026gal",
+          "name": "Galileo Division",
+          "rank": 59,
+          "wins": 3,
+          "losses": 7,
+          "ties": 0,
+          "awards": [
+            "Engineering Inspiration Award sponsored by SpaceX"
+          ],
+          "playoff": null,
+          "qualMatches": 125,
+          "opr": 58.7
+        }
+      ],
+      "awards": [
+        {
+          "year": 2026,
+          "eventKey": "2026gal",
+          "event": "Galileo Division",
+          "name": "Engineering Inspiration Award sponsored by SpaceX"
+        },
+        {
+          "year": 2026,
+          "eventKey": "2026tuhc",
+          "event": "Haliç Regional",
+          "name": "Regional FIRST Impact Award"
+        },
+        {
+          "year": 2025,
+          "eventKey": "2025gal",
+          "event": "Galileo Division",
+          "name": "Engineering Inspiration Award"
+        },
+        {
+          "year": 2025,
+          "eventKey": "2025tuhc",
+          "event": "Haliç Regional",
+          "name": "FIRST Dean's List Finalist Award (Demir Ali İ)"
+        },
+        {
+          "year": 2025,
+          "eventKey": "2025tuhc",
+          "event": "Haliç Regional",
+          "name": "Team Sustainability Award sponsored by Dow"
+        },
+        {
+          "year": 2024,
+          "eventKey": "2024cmptx",
+          "event": "Einstein Field",
+          "name": "FIRST Impact Award Finalist"
+        },
+        {
+          "year": 2024,
+          "eventKey": "2024tuhc",
+          "event": "Haliç Regional",
+          "name": "Regional FIRST Impact Award"
+        },
+        {
+          "year": 2024,
+          "eventKey": "2024tuhc",
+          "event": "Haliç Regional",
+          "name": "Woodie Flowers Finalist Award (Aylin Gil)"
+        },
+        {
+          "year": 2023,
+          "eventKey": "2023tuhc",
+          "event": "Halic Regional",
+          "name": "FIRST Dean's List Finalist Award (Demir Sonar)"
+        },
+        {
+          "year": 2023,
+          "eventKey": "2023tuhc",
+          "event": "Halic Regional",
+          "name": "Autonomous Award sponsored by Ford"
+        },
+        {
+          "year": 2022,
+          "eventKey": "2022cmptx",
+          "event": "Einstein Field",
+          "name": "Chairman's Award Finalist"
+        },
+        {
+          "year": 2022,
+          "eventKey": "2022tuis3",
+          "event": "Izmir Regional",
+          "name": "Regional Chairman's Award"
+        },
+        {
+          "year": 2022,
+          "eventKey": "2022tuis3",
+          "event": "Izmir Regional",
+          "name": "Volunteer of the Year (ZEKI DEVRIM SIRDAS)"
+        },
+        {
+          "year": 2022,
+          "eventKey": "2022tuis3",
+          "event": "Izmir Regional",
+          "name": "FIRST Dean's List Finalist Award (Nevin Ada Çakmak)"
+        },
+        {
+          "year": 2021,
+          "eventKey": "2021turaw",
+          "event": "Turkish Region Awards Event",
+          "name": "Regional Chairman's Award"
+        },
+        {
+          "year": 2021,
+          "eventKey": "2021turaw",
+          "event": "Turkish Region Awards Event",
+          "name": "Woodie Flowers Finalist Award (Zeki Devrim Sırdaş)"
+        },
+        {
+          "year": 2021,
+          "eventKey": "2021gamh",
+          "event": "Hydrogen Group - Game Design Challenge",
+          "name": "Engineering Design Award"
+        },
+        {
+          "year": 2021,
+          "eventKey": "2021irhga",
+          "event": "Gallium Group - INFINITE RECHARGE At Home Challenge",
+          "name": "Industrial Design Award sponsored by General Motors"
+        },
+        {
+          "year": 2021,
+          "eventKey": "2021irhga",
+          "event": "Gallium Group - INFINITE RECHARGE At Home Challenge",
+          "name": "Skills Competition Finalist"
+        },
+        {
+          "year": 2020,
+          "eventKey": "2020tuis",
+          "event": "Istanbul Regional",
+          "name": "FIRST Dean's List Finalist Award (Zeynep Naz Avcı)"
+        },
+        {
+          "year": 2020,
+          "eventKey": "2020tuis",
+          "event": "Istanbul Regional",
+          "name": "Gracious Professionalism Award sponsored by Johnson & Johnson"
+        },
+        {
+          "year": 2019,
+          "eventKey": "2019tuis",
+          "event": "Istanbul Regional",
+          "name": "Regional Engineering Inspiration Award"
+        },
+        {
+          "year": 2019,
+          "eventKey": "2019tuis",
+          "event": "Istanbul Regional",
+          "name": "Regional Finalists"
+        },
+        {
+          "year": 2018,
+          "eventKey": "2018gal",
+          "event": "Galileo Division",
+          "name": "Judges' Award"
+        },
+        {
+          "year": 2018,
+          "eventKey": "2018tuis",
+          "event": "Istanbul Regional",
+          "name": "Regional Chairman's Award"
+        },
+        {
+          "year": 2018,
+          "eventKey": "2018tuis",
+          "event": "Istanbul Regional",
+          "name": "Regional Winners"
+        },
+        {
+          "year": 2017,
+          "eventKey": "2017hop",
+          "event": "Hopper Division",
+          "name": "Rookie Inspiration Award sponsored by National Instruments"
+        },
+        {
+          "year": 2017,
+          "eventKey": "2017casf",
+          "event": "San Francisco Regional",
+          "name": "Rookie All Star Award"
+        },
+        {
+          "year": 2017,
+          "eventKey": "2017casf",
+          "event": "San Francisco Regional",
+          "name": "Highest Rookie Seed"
+        }
+      ]
+    },
     "6647": {
       "number": 6647,
       "nickname": "PrepaTec - VOLTEC",
@@ -26719,16 +26941,6 @@
           "name": "Judges' Award"
         }
       ]
-    },
-    "64294": {
-      "number": 64294,
-      "nickname": null,
-      "location": null,
-      "rookieYear": null,
-      "record": null,
-      "pool": null,
-      "events": [],
-      "awards": []
     }
   }
 }

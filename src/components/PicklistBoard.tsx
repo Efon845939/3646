@@ -16,7 +16,7 @@ import { Team, mockTeams } from '../data';
 import { PICKLIST_LANES, PICKLIST_LANE_META, PicklistApi, PicklistLane } from '../hooks/usePicklist';
 import { deriveCoreArchetype, FRCCoreArchetype } from '../utils/teamArchetypes';
 import { HOST_TEAM_NUMBER } from '../utils/quickFilters';
-import { epaWinPercent } from '../utils/winProbability';
+import { formatRecord, getRealMetrics, winRateOf } from '../utils/realMetrics';
 import { readScoutNotes } from '../utils/storage';
 import { datedFilename, downloadCsv } from '../utils/csvExport';
 
@@ -28,7 +28,7 @@ interface PicklistBoardProps {
 }
 
 type DropZone = PicklistLane | 'pool';
-type PoolSort = 'epa' | 'auto' | 'opr' | 'score';
+type PoolSort = 'opr' | 'win' | 'score';
 
 // Short labels keep a lane row on two lines even in the narrow four-column layout.
 const ARCHETYPE_SHORT: Record<FRCCoreArchetype, string> = {
@@ -42,20 +42,20 @@ const ARCHETYPE_SHORT: Record<FRCCoreArchetype, string> = {
 const teamByNumber = new Map(mockTeams.map((t) => [t.number, t]));
 const archetypeByTeam = new Map(mockTeams.map((t) => [t.number, deriveCoreArchetype(t)]));
 const hostTeam = teamByNumber.get(HOST_TEAM_NUMBER)!;
-const epaOf = (t: Team) => t.frcStats?.epa.total ?? 0;
-const sumEPA = (teams: Team[]) => Math.round(teams.reduce((acc, t) => acc + epaOf(t), 0) * 10) / 10;
+// Real best-event OPR. An alliance's OPR sum is the standard estimate of its match score.
+const oprOf = (t: Team) => getRealMetrics(t.number)?.bestOpr ?? 0;
+const sumOpr = (teams: Team[]) => Math.round(teams.reduce((acc, t) => acc + oprOf(t), 0) * 10) / 10;
 
 const POOL_SORTS: Record<PoolSort, { label: string; value: (t: Team) => number }> = {
-  epa: { label: 'Total EPA', value: epaOf },
-  auto: { label: 'Auto EPA', value: (t) => t.frcStats?.epa.auto ?? 0 },
-  opr: { label: 'OPR', value: (t) => t.frcStats?.opr ?? 0 },
+  opr: { label: 'Best OPR', value: oprOf },
+  win: { label: 'Win Rate', value: (t) => winRateOf(getRealMetrics(t.number)?.record ?? null) ?? 0 },
   score: { label: 'Pre-PR Score', value: (t) => t.score },
 };
 
 export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator }: PicklistBoardProps) {
   const { lists, laneByTeam, moveTeam, shiftTeam, clearPicklist } = picklist;
   const [poolQuery, setPoolQuery] = useState('');
-  const [poolSort, setPoolSort] = useState<PoolSort>('epa');
+  const [poolSort, setPoolSort] = useState<PoolSort>('opr');
   const [dragging, setDragging] = useState<number | null>(null);
   const [dropTarget, setDropTarget] = useState<{ zone: DropZone; before: number | null } | null>(null);
 
@@ -69,7 +69,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
   }, [laneByTeam, poolQuery, poolSort]);
 
   // Our projected alliance is the captain plus the top name on each pick lane. The rival
-  // benchmark is the strongest EPA trio left once those three are off the board.
+  // benchmark is the strongest OPR trio left once those three are off the board.
   const projection = useMemo(() => {
     const picks = [lists.first[0], lists.second[0]]
       .filter((n): n is number => n !== undefined)
@@ -78,14 +78,14 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
     const taken = new Set(ours.map((t) => t.number));
     const rivals = mockTeams
       .filter((t) => !taken.has(t.number))
-      .sort((a, b) => epaOf(b) - epaOf(a))
+      .sort((a, b) => oprOf(b) - oprOf(a))
       .slice(0, 3);
-    const ourEPA = sumEPA(ours);
-    const rivalEPA = sumEPA(rivals);
-    // A 1- or 2-robot alliance against a full trio says nothing useful, so only project
-    // a win chance once both picks are set.
+    const ourOpr = sumOpr(ours);
+    const rivalOpr = sumOpr(rivals);
+    // A 1- or 2-robot alliance against a full trio says nothing useful, so only compare
+    // predicted scores once both picks are set.
     const isComplete = ours.length === 3;
-    return { ours, rivals, ourEPA, rivalEPA, isComplete, winPct: epaWinPercent(ourEPA, rivalEPA) };
+    return { ours, rivals, ourOpr, rivalOpr, isComplete, margin: Math.round((ourOpr - rivalOpr) * 10) / 10 };
   }, [lists]);
 
   const handleDrop = (e: React.DragEvent, zone: DropZone, before: number | null) => {
@@ -109,22 +109,21 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
 
   const exportPicklist = () => {
     const rows: (string | number)[][] = [
-      ['Lane', 'Order', 'Team', 'Name', 'EPA Total', 'EPA Auto', 'OPR', 'Win %', 'Climb', 'Archetype', 'Scout Notes'],
+      ['Lane', 'Order', 'Team', 'Name', 'Best OPR', 'Record', 'Win %', 'Best Event Rank', 'Archetype', 'Scout Notes'],
     ];
     for (const lane of PICKLIST_LANES) {
       lists[lane].forEach((n, idx) => {
         const t = teamByNumber.get(n)!;
-        const s = t.frcStats!;
+        const real = getRealMetrics(n);
         rows.push([
           PICKLIST_LANE_META[lane].label,
           idx + 1,
           t.number,
           t.name,
-          s.epa.total,
-          s.epa.auto,
-          s.opr,
-          s.record.winRate,
-          s.cycles.climbType,
+          real?.bestOpr ?? '',
+          formatRecord(real?.record ?? null),
+          winRateOf(real?.record ?? null) ?? '',
+          real?.bestEventRank ?? '',
           archetypeByTeam.get(n)!.coreArchetype,
           readScoutNotes(n),
         ]);
@@ -136,7 +135,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
   const totalListed = lists.first.length + lists.second.length + lists.dnp.length;
 
   const renderRow = (team: Team, zone: DropZone, index: number | null) => {
-    const stats = team.frcStats!;
+    const real = getRealMetrics(team.number);
     const archetype = archetypeByTeam.get(team.number)!;
     const isDropBefore = dropTarget?.zone === zone && dropTarget.before === team.number && dragging !== team.number;
     const lane = zone === 'pool' ? null : zone;
@@ -166,7 +165,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
           }
         }}
         onDrop={(e) => handleDrop(e, zone, zone === 'pool' ? null : team.number)}
-        title={`${archetype.coreArchetype} · ${stats.cycles.climbType} (${stats.cycles.climbSuccessPct}%) · ${stats.cycles.avgCycleTimeSec}s cycle`}
+        title={`${archetype.coreArchetype} · best event rank ${real?.bestEventRank ? `#${real.bestEventRank}` : '—'}`}
         className={`group rounded-lg border bg-surface px-2 py-1.5 transition-colors cursor-grab active:cursor-grabbing ${
           dragging === team.number ? 'opacity-40' : ''
         } ${isDropBefore ? 'border-t-2 border-t-accent border-border-main' : 'border-border-main hover:border-text-muted/50'}`}
@@ -174,7 +173,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
         <div className="flex items-center gap-1.5 min-w-0">
           <GripVertical className="w-3.5 h-3.5 text-text-muted/60 shrink-0" aria-hidden="true" />
           {index !== null && (
-            <span className="w-5 text-[10px] font-mono font-bold text-text-muted text-right shrink-0">{index + 1}.</span>
+            <span className="w-5 text-xs font-mono font-bold text-text-muted text-right shrink-0">{index + 1}.</span>
           )}
           <button
             type="button"
@@ -183,21 +182,21 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
             title="Open scouting profile"
           >
             <span className="font-montserrat font-black text-sm text-text-main shrink-0">#{team.number}</span>
-            <span className="text-[11px] text-text-muted truncate">{team.name}</span>
+            <span className="text-sm text-text-muted truncate">{team.name}</span>
           </button>
           {hasNotes && <FileText className="w-3 h-3 text-accent shrink-0" aria-label="Has scout notes" />}
-          <span className="ml-auto font-mono text-xs font-bold text-accent shrink-0" title="Total EPA">
-            {stats.epa.total}
+          <span className="ml-auto font-mono text-sm font-bold text-accent shrink-0" title="Best 2026 event OPR">
+            {real?.bestOpr ?? '—'}
           </span>
         </div>
 
         <div className="flex items-center gap-1.5 mt-1 pl-5 min-w-0">
           <span
-            className={`shrink-0 px-1 py-px rounded border text-[8px] font-black uppercase ${archetype.bgLightColor} ${archetype.badgeColor} ${archetype.borderColor}`}
+            className={`shrink-0 px-1 py-px rounded border text-[11px] font-black uppercase ${archetype.bgLightColor} ${archetype.badgeColor} ${archetype.borderColor}`}
           >
             {ARCHETYPE_SHORT[archetype.coreArchetype]}
           </span>
-          <span className="text-[10px] font-mono text-text-muted whitespace-nowrap">OPR {stats.opr}</span>
+          <span className="text-xs font-mono text-text-muted whitespace-nowrap">{formatRecord(real?.record ?? null)}</span>
 
           <div className="ml-auto flex items-center gap-0.5 shrink-0">
             {lane && index !== null && (
@@ -219,7 +218,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
                 key={l}
                 type="button"
                 onClick={() => moveTeam(team.number, l)}
-                className="px-1 py-px rounded border border-border-main text-[9px] font-bold uppercase text-text-muted hover:text-text-main hover:border-text-muted transition-colors"
+                className="px-1 py-px rounded border border-border-main text-xs font-bold uppercase text-text-muted hover:text-text-main hover:border-text-muted transition-colors"
                 title={`Move to ${PICKLIST_LANE_META[l].label}`}
               >
                 {l === 'first' ? '1st' : l === 'second' ? '2nd' : 'DNP'}
@@ -278,7 +277,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
             className="px-3 py-1.5 rounded-lg border border-border-main bg-surface hover:bg-surface-hover text-xs font-bold uppercase text-text-muted hover:text-text-main flex items-center gap-1.5 transition-colors"
           >
             Dashboard
-            <kbd className="text-[9px] font-mono px-1 rounded bg-bg-dark border border-border-main">Esc</kbd>
+            <kbd className="text-xs font-mono px-1 rounded bg-bg-dark border border-border-main">Esc</kbd>
           </button>
         </div>
       </div>
@@ -288,16 +287,22 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
         <AllianceSummary
           title="Projected IntegrA Alliance"
           teams={projection.ours}
-          epa={projection.ourEPA}
+          opr={projection.ourOpr}
           tone="ours"
           onSelectTeam={onSelectTeam}
         />
         <div className="flex lg:flex-col items-center justify-center gap-2 px-4 py-3 bg-surface border border-border-main rounded-xl">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">Win prob.</span>
+          <span className="text-xs uppercase font-bold tracking-wider text-text-muted">Predicted margin</span>
           {projection.isComplete ? (
-            <span className="text-3xl font-montserrat font-black text-accent">{projection.winPct}%</span>
+            <span
+              className={`text-3xl font-montserrat font-black ${projection.margin >= 0 ? 'text-accent' : 'text-rose-500'}`}
+              title="Our OPR sum minus theirs: the expected difference in match score"
+            >
+              {projection.margin >= 0 ? '+' : ''}
+              {projection.margin}
+            </span>
           ) : (
-            <span className="text-center text-[11px] text-text-muted leading-tight">
+            <span className="text-center text-sm text-text-muted leading-tight">
               <span className="block text-3xl font-montserrat font-black text-text-muted">—</span>
               Set a 1st & 2nd pick
             </span>
@@ -305,7 +310,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
           <button
             type="button"
             onClick={() => onOpenSimulator(hostTeam, projection.rivals[0])}
-            className="px-2 py-1 rounded border border-integra-yellow/50 text-accent text-[10px] font-bold uppercase flex items-center gap-1 hover:bg-surface-hover"
+            className="px-2 py-1 rounded border border-integra-yellow/50 text-accent text-xs font-bold uppercase flex items-center gap-1 hover:bg-surface-hover"
             title="Open the match simulator with these captains"
           >
             <Swords className="w-3 h-3" /> Simulate
@@ -314,7 +319,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
         <AllianceSummary
           title="Strongest Remaining Trio"
           teams={projection.rivals}
-          epa={projection.rivalEPA}
+          opr={projection.rivalOpr}
           tone="rival"
           onSelectTeam={onSelectTeam}
         />
@@ -333,7 +338,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
             <span className="text-xs font-black uppercase tracking-wider text-text-main flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-accent" /> Available
             </span>
-            <span className="text-[10px] font-mono text-text-muted">{pool.length}</span>
+            <span className="text-xs font-mono text-text-muted">{pool.length}</span>
           </div>
           <div className="flex gap-1.5">
             <div className="relative flex-1">
@@ -351,7 +356,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
               value={poolSort}
               onChange={(e) => setPoolSort(e.target.value as PoolSort)}
               aria-label="Sort available teams"
-              className="bg-surface border border-border-main rounded-md px-1.5 text-[11px] text-text-main outline-none focus:border-accent"
+              className="bg-surface border border-border-main rounded-md px-1.5 text-sm text-text-main outline-none focus:border-accent"
             >
               {Object.entries(POOL_SORTS).map(([key, { label }]) => (
                 <option key={key} value={key}>
@@ -363,7 +368,7 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
           <ul className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto pr-0.5">
             {pool.map((team) => renderRow(team, 'pool', null))}
             {pool.length === 0 && (
-              <li className="text-[11px] text-text-muted text-center py-6">No teams match.</li>
+              <li className="text-sm text-text-muted text-center py-6">No teams match.</li>
             )}
           </ul>
         </section>
@@ -379,17 +384,17 @@ export function PicklistBoard({ picklist, onClose, onSelectTeam, onOpenSimulator
           >
             <div className="flex items-center justify-between">
               <span
-                className={`px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-wider ${PICKLIST_LANE_META[lane].badgeClass}`}
+                className={`px-2 py-0.5 rounded border text-xs font-black uppercase tracking-wider ${PICKLIST_LANE_META[lane].badgeClass}`}
               >
                 {PICKLIST_LANE_META[lane].label}
               </span>
-              <span className="text-[10px] font-mono text-text-muted">{lists[lane].length}</span>
+              <span className="text-xs font-mono text-text-muted">{lists[lane].length}</span>
             </div>
             <ul className="flex flex-col gap-1.5 max-h-[60vh] overflow-y-auto pr-0.5 pb-6">
               {lists[lane].map((n, idx) => renderRow(teamByNumber.get(n)!, lane, idx))}
             </ul>
             {lists[lane].length === 0 && (
-              <p className="text-[11px] text-text-muted text-center border border-dashed border-border-main rounded-lg py-8 px-3">
+              <p className="text-sm text-text-muted text-center border border-dashed border-border-main rounded-lg py-8 px-3">
                 Drag teams here or use the <span className="font-bold">{lane === 'first' ? '1st' : lane === 'second' ? '2nd' : 'DNP'}</span> button.
               </p>
             )}
@@ -428,13 +433,13 @@ function IconButton({
 function AllianceSummary({
   title,
   teams,
-  epa,
+  opr,
   tone,
   onSelectTeam,
 }: {
   title: string;
   teams: Team[];
-  epa: number;
+  opr: number;
   tone: 'ours' | 'rival';
   onSelectTeam: (team: Team) => void;
 }) {
@@ -446,9 +451,9 @@ function AllianceSummary({
       }`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] uppercase font-bold tracking-wider text-text-muted">{title}</span>
+        <span className="text-xs uppercase font-bold tracking-wider text-text-muted">{title}</span>
         <span className={`font-mono text-sm font-black ${tone === 'ours' ? 'text-accent' : 'text-rose-500'}`}>
-          {epa} EPA
+          {opr} OPR
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -462,16 +467,16 @@ function AllianceSummary({
               onClick={() => team && onSelectTeam(team)}
               className="text-left p-1.5 rounded-lg bg-bg-dark border border-border-main hover:border-text-muted/60 disabled:hover:border-border-main transition-colors min-w-0"
             >
-              <span className="block text-[9px] uppercase font-bold text-text-muted">
-                {tone === 'ours' ? role : `#${idx + 1} EPA`}
+              <span className="block text-xs uppercase font-bold text-text-muted">
+                {tone === 'ours' ? role : `#${idx + 1} OPR`}
               </span>
               {team ? (
                 <>
                   <span className="block font-montserrat font-black text-sm text-text-main">#{team.number}</span>
-                  <span className="block text-[10px] font-mono text-text-muted truncate">{epaOf(team)} EPA</span>
+                  <span className="block text-xs font-mono text-text-muted truncate">{oprOf(team)} OPR</span>
                 </>
               ) : (
-                <span className="block text-[11px] text-text-muted italic py-1">Not set</span>
+                <span className="block text-sm text-text-muted italic py-1">Not set</span>
               )}
             </button>
           );

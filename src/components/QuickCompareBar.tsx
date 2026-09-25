@@ -43,7 +43,7 @@ export function QuickCompareBar({
                 <span className="text-xs font-black font-montserrat uppercase tracking-wider text-integra-yellow">
                   Quick Compare
                 </span>
-                <span className="text-[10px] font-bold px-1.5 py-0.2 bg-white/10 rounded-full text-zinc-300 font-mono">
+                <span className="text-xs font-bold px-1.5 py-0.2 bg-white/10 rounded-full text-zinc-300 font-mono">
                   {selectedTeams.length}/4 Teams
                 </span>
               </div>
@@ -58,10 +58,10 @@ export function QuickCompareBar({
                     <span className="text-integra-yellow font-black font-montserrat">
                       #{team.number}
                     </span>
-                    <span className="text-[11px] text-zinc-300 truncate max-w-[80px]">
+                    <span className="text-sm text-zinc-300 truncate max-w-[80px]">
                       {team.name}
                     </span>
-                    <span className="text-[10px] text-zinc-400 font-mono">
+                    <span className="text-xs text-zinc-400 font-mono">
                       ({team.score})
                     </span>
                     <button
@@ -111,7 +111,7 @@ export function QuickCompareBar({
               className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-integra-yellow hover:bg-yellow-400 text-[#111111] font-montserrat font-black text-xs uppercase tracking-wider transition-all duration-200 shadow-md flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]"
             >
               <span>Compare Now ({selectedTeams.length})</span>
-              <kbd className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/20 text-[#111111] border border-black/15 shadow-2xs">
+              <kbd className="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-black/20 text-[#111111] border border-black/15 shadow-2xs">
                 C
               </kbd>
               <ArrowRight className="w-4 h-4 stroke-[2.5]" />

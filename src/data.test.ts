@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mockTeams, getEnhancedTeamStats } from './data';
+import { mockTeams } from './data';
+import { getRealMetrics } from './utils/realMetrics';
 
 describe('team dataset', () => {
   it('uses the team number as a unique key', () => {
@@ -30,13 +31,41 @@ describe('team dataset', () => {
     }
   });
 
-  it('prefers curated stats over procedural ones', () => {
-    expect(mockTeams.find((t) => t.number === 3646)!.frcStats!.epa.total).toBe(54.2);
+  it('keeps #3646 at its place in the source ranking (92 points, #11)', () => {
+    const host = mockTeams.find((t) => t.number === 3646)!;
+    expect(host.score).toBe(92);
+    expect(host.rank).toBe(11);
   });
 
-  it('precomputes exactly what the deterministic generator returns', () => {
+  it('uses real TBA results for every record and OPR shown', () => {
     for (const team of mockTeams) {
-      expect(team.frcStats).toEqual(getEnhancedTeamStats(team));
+      const real = getRealMetrics(team.number);
+      expect(real).not.toBeNull();
+      expect([team.frcStats!.record.wins, team.frcStats!.record.losses, team.frcStats!.record.ties]).toEqual(real!.record);
+      expect(team.frcStats!.opr).toBe(real!.bestOpr ?? 0);
     }
+  });
+
+  it('orders the simulator rating by real scoring power', () => {
+    const byOpr = [...mockTeams].sort((a, b) => a.stats.opr - b.stats.opr);
+    for (let i = 1; i < byOpr.length; i++) {
+      expect(byOpr[i].frcStats!.epa.total).toBeGreaterThanOrEqual(byOpr[i - 1].frcStats!.epa.total);
+    }
+  });
+
+  it('builds the radar from percentiles within 0–100', () => {
+    for (const team of mockTeams) {
+      for (const value of Object.values(team.stats)) {
+        expect(value).toBeGreaterThanOrEqual(0);
+        expect(value).toBeLessThanOrEqual(100);
+      }
+    }
+    // #1678 had the lowest-looking radar under the old random ratings; real data puts it on top.
+    expect(mockTeams.find((t) => t.number === 1678)!.stats.opr).toBe(100);
+  });
+
+  it('has no team numbers mangled by the original importer', () => {
+    expect(mockTeams.some((t) => t.number === 64294)).toBe(false);
+    expect(mockTeams.find((t) => t.number === 6429)?.name).toBe('4th Dimension');
   });
 });

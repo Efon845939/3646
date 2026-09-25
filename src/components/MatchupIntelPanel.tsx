@@ -18,23 +18,25 @@ const IMPACT_CLASS: Record<ProactiveMatchupTactic['impact'], string> = {
 };
 
 const hostTeam = mockTeams.find((t) => t.number === HOST_TEAM_NUMBER)!;
-const rivalsByEPA = mockTeams
+const rivalsByOpr = mockTeams
   .filter((t) => t.number !== HOST_TEAM_NUMBER)
-  .sort((a, b) => (b.frcStats?.epa.total ?? 0) - (a.frcStats?.epa.total ?? 0));
+  .sort((a, b) => (b.frcStats?.opr ?? 0) - (a.frcStats?.opr ?? 0));
 
 export function MatchupIntelPanel({ team }: { team: Team }) {
   const isHost = team.number === HOST_TEAM_NUMBER;
-  // Viewing our own profile: pick an opponent to scout against (defaults to the top EPA rival).
-  const [rivalNumber, setRivalNumber] = useState(rivalsByEPA[0].number);
-  const rival = isHost ? rivalsByEPA.find((t) => t.number === rivalNumber)! : team;
+  // Viewing our own profile: pick an opponent to scout against (defaults to the top OPR rival).
+  const [rivalNumber, setRivalNumber] = useState(rivalsByOpr[0].number);
+  const rival = isHost ? rivalsByOpr.find((t) => t.number === rivalNumber)! : team;
 
   const intel = useMemo(() => generateMatchupTactics(hostTeam, rival), [rival]);
-  const winPct = intel.winProbabilityEstimate;
+  const hostOpr = hostTeam.frcStats?.opr ?? 0;
+  const rivalOpr = rival.frcStats?.opr ?? 0;
+  const hostShare = hostOpr + rivalOpr > 0 ? Math.round((hostOpr / (hostOpr + rivalOpr)) * 100) : 50;
 
   return (
     <div className="bg-bg-dark rounded-xl border border-border-main p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
           <Crosshair className="w-4 h-4 text-accent" />
           <span>
             Matchup Intel · #{HOST_TEAM_NUMBER} vs #{rival.number}
@@ -46,17 +48,17 @@ export function MatchupIntelPanel({ team }: { team: Team }) {
               value={rivalNumber}
               onChange={(e) => setRivalNumber(Number(e.target.value))}
               aria-label="Opponent to analyse"
-              className="bg-surface border border-border-main rounded px-2 py-1 text-xs text-text-main outline-none focus:border-accent"
+              className="bg-surface border border-border-main rounded px-2 py-1 text-sm text-text-main outline-none focus:border-accent"
             >
-              {rivalsByEPA.map((t) => (
+              {rivalsByOpr.map((t) => (
                 <option key={t.number} value={t.number}>
-                  #{t.number} {t.name} (EPA {t.frcStats?.epa.total})
+                  #{t.number} {t.name} (OPR {t.frcStats?.opr})
                 </option>
               ))}
             </select>
           )}
           <span
-            className={`px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${THREAT_CLASS[intel.threatLevel]}`}
+            className={`px-2 py-0.5 rounded border text-xs font-black uppercase tracking-wider flex items-center gap-1 ${THREAT_CLASS[intel.threatLevel]}`}
           >
             <ShieldAlert className="w-3 h-3" />
             {intel.threatLevel} threat
@@ -64,15 +66,15 @@ export function MatchupIntelPanel({ team }: { team: Team }) {
         </div>
       </div>
 
-      {/* EPA win probability bar (same logistic model as the match simulator) */}
+      {/* Real scoring power side by side: best 2026 event OPR of each team */}
       <div>
-        <div className="flex justify-between text-[10px] font-mono font-bold mb-1">
-          <span className="text-accent">#{HOST_TEAM_NUMBER} win {winPct}%</span>
-          <span className="text-text-muted uppercase tracking-wider">1v1 EPA model</span>
-          <span className="text-rose-500">#{rival.number} win {100 - winPct}%</span>
+        <div className="flex justify-between text-sm font-mono font-bold mb-1">
+          <span className="text-accent">#{HOST_TEAM_NUMBER} OPR {hostOpr}</span>
+          <span className="text-text-muted text-xs uppercase tracking-wider">Best 2026 event OPR</span>
+          <span className="text-rose-500">#{rival.number} OPR {rivalOpr}</span>
         </div>
-        <div className="h-2 rounded-full overflow-hidden flex bg-surface border border-border-main">
-          <div className="bg-integra-yellow" style={{ width: `${winPct}%` }} />
+        <div className="h-2.5 rounded-full overflow-hidden flex bg-surface border border-border-main">
+          <div className="bg-integra-yellow" style={{ width: `${hostShare}%` }} />
           <div className="bg-rose-500/70 flex-1" />
         </div>
       </div>
@@ -87,13 +89,13 @@ export function MatchupIntelPanel({ team }: { team: Team }) {
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-text-main truncate">{label}</span>
               <span
-                className={`shrink-0 px-1.5 py-0.5 rounded border text-[9px] font-black uppercase ${info.bgLightColor} ${info.badgeColor} ${info.borderColor}`}
+                className={`shrink-0 px-1.5 py-0.5 rounded border text-xs font-black uppercase ${info.bgLightColor} ${info.badgeColor} ${info.borderColor}`}
               >
                 {info.coreArchetype}
               </span>
             </div>
-            <p className="text-[11px] text-text-muted leading-snug">{info.description}</p>
-            <ul className="text-[10px] text-text-muted font-mono space-y-0.5">
+            <p className="text-sm text-text-muted leading-snug">{info.description}</p>
+            <ul className="text-xs text-text-muted font-mono space-y-0.5">
               {info.scoutingHighlights.map((h) => (
                 <li key={h}>• {h}</li>
               ))}
@@ -106,7 +108,7 @@ export function MatchupIntelPanel({ team }: { team: Team }) {
       <div className="rounded-lg border border-border-main overflow-hidden">
         <table className="w-full text-xs">
           <thead>
-            <tr className="bg-surface text-[10px] uppercase tracking-wider text-text-muted">
+            <tr className="bg-surface text-xs uppercase tracking-wider text-text-muted">
               <th className="text-left font-bold px-3 py-1.5">Metric</th>
               <th className="text-right font-bold px-3 py-1.5">#{HOST_TEAM_NUMBER}</th>
               <th className="text-center font-bold px-2 py-1.5 w-10">Edge</th>
@@ -143,14 +145,14 @@ export function MatchupIntelPanel({ team }: { team: Team }) {
         {intel.proactiveTactics.map((tactic) => (
           <div key={tactic.id} className="p-3 bg-surface rounded-lg border border-border-main space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-mono font-bold uppercase text-text-muted">{tactic.phase}</span>
-              <span className={`px-1.5 py-0.5 rounded border text-[9px] font-black uppercase ${IMPACT_CLASS[tactic.impact]}`}>
+              <span className="text-xs font-mono font-bold uppercase text-text-muted">{tactic.phase}</span>
+              <span className={`px-1.5 py-0.5 rounded border text-xs font-black uppercase ${IMPACT_CLASS[tactic.impact]}`}>
                 {tactic.impact}
               </span>
             </div>
             <div className="text-xs font-bold text-text-main">{tactic.title}</div>
-            <p className="text-[11px] text-text-muted leading-snug">{tactic.summary}</p>
-            <p className="text-[11px] text-text-main leading-snug border-l-2 border-integra-yellow pl-2">
+            <p className="text-sm text-text-muted leading-snug">{tactic.summary}</p>
+            <p className="text-sm text-text-main leading-snug border-l-2 border-integra-yellow pl-2">
               {tactic.recommendedAction}
             </p>
           </div>

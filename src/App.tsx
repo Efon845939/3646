@@ -340,7 +340,7 @@ export default function App() {
                   searchInputRef.current?.focus();
                   searchInputRef.current?.select();
                 }}
-                className="hidden sm:inline-flex items-center justify-center text-[9px] font-mono px-1.5 py-0.5 rounded bg-bg-dark border border-border-main text-text-muted cursor-pointer hover:border-text-muted hover:text-text-main select-none"
+                className="hidden sm:inline-flex items-center justify-center text-xs font-mono px-1.5 py-0.5 rounded bg-bg-dark border border-border-main text-text-muted cursor-pointer hover:border-text-muted hover:text-text-main select-none"
                 title="Press / to focus search"
               >
                 /
@@ -550,7 +550,7 @@ export default function App() {
       >
         <Keyboard className="w-4 h-4 text-accent group-hover:scale-110 transition-transform" />
         <span className="font-medium">Shortcuts</span>
-        <kbd className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-bg-dark border border-border-main text-text-muted group-hover:text-accent">
+        <kbd className="px-1.5 py-0.5 text-xs font-mono rounded bg-bg-dark border border-border-main text-text-muted group-hover:text-accent">
           ?
         </kbd>
       </button>

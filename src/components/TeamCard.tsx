@@ -1,6 +1,7 @@
 import React from 'react';
 import { Scale, CheckSquare } from 'lucide-react';
-import { Team, STAT_META, getEnhancedTeamStats } from '../data';
+import { Team, STAT_META } from '../data';
+import { formatRecord, getRealMetrics, winRateOf } from '../utils/realMetrics';
 import { HexRadar, HexRadarAxis } from './HexRadar';
 import { PICKLIST_LANE_META, PicklistLane } from '../hooks/usePicklist';
 import { HOST_TEAM_NUMBER } from '../utils/quickFilters';
@@ -28,7 +29,7 @@ export function TeamCard({
   compareIndex,
   picklistLane = null,
 }: TeamCardProps) {
-  const frcStats = team.frcStats || getEnhancedTeamStats(team);
+  const real = getRealMetrics(team.number);
   const radarValues = RADAR_AXES.map((axis) => team.stats[axis.key as keyof Team['stats']]);
   const isHost = team.number === HOST_TEAM_NUMBER;
 
@@ -106,11 +107,11 @@ export function TeamCard({
         </div>
       </div>
 
-      {/* The three numbers that matter most at a glance */}
+      {/* The three numbers that matter most at a glance, all real 2026 results */}
       <div className="grid grid-cols-3 border-t border-border-main pt-4 mt-auto">
-        <KeyStat label="EPA" value={frcStats.epa.total} accent />
-        <KeyStat label="OPR" value={frcStats.opr} />
-        <KeyStat label="Win Rate" value={`${frcStats.record.winRate}%`} />
+        <KeyStat label="Best OPR" value={real?.bestOpr ?? '—'} accent />
+        <KeyStat label="Record" value={formatRecord(real?.record ?? null)} />
+        <KeyStat label="Win Rate" value={`${winRateOf(real?.record ?? null) ?? '—'}%`} />
       </div>
     </div>
   );

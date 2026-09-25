@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   X,
   Search,
@@ -153,13 +153,13 @@ export function MatchSimulator({
 
   // Statbotics Pre-Match Alliance Predictions
   const predictions = useMemo(() => {
-    const bCapStats = getEnhancedTeamStats(blueCaptain);
-    const bP1Stats = getEnhancedTeamStats(bluePick1);
-    const bP2Stats = getEnhancedTeamStats(bluePick2);
+    const bCapStats = blueCaptain.frcStats ?? getEnhancedTeamStats(blueCaptain);
+    const bP1Stats = bluePick1.frcStats ?? getEnhancedTeamStats(bluePick1);
+    const bP2Stats = bluePick2.frcStats ?? getEnhancedTeamStats(bluePick2);
 
-    const rCapStats = getEnhancedTeamStats(redCaptain);
-    const rP1Stats = getEnhancedTeamStats(redPick1);
-    const rP2Stats = getEnhancedTeamStats(redPick2);
+    const rCapStats = redCaptain.frcStats ?? getEnhancedTeamStats(redCaptain);
+    const rP1Stats = redPick1.frcStats ?? getEnhancedTeamStats(redPick1);
+    const rP2Stats = redPick2.frcStats ?? getEnhancedTeamStats(redPick2);
 
     const blueTotalEPA =
       simMode === '3v3'
@@ -340,6 +340,36 @@ export function MatchSimulator({
     ]);
   };
 
+  // Everything the frame loop reads, refreshed after every render. The loop itself is started
+  // once per run (it depends only on isRunning), so it never skips frames by being torn down
+  // and re-subscribed whenever state changes, which used to happen on every single frame.
+  const latestRef = useRef({
+    speedMode,
+    blueStrategy,
+    redStrategy,
+    simMode,
+    blueCaptain,
+    redCaptain,
+    blueAmplified: blueAmplifiedRemaining > 0,
+    redAmplified: redAmplifiedRemaining > 0,
+    updateRobotStep: (..._args: Parameters<typeof updateRobotStep>) => {},
+    simulateAllianceWingBots: (..._args: Parameters<typeof simulateAllianceWingBots>) => {},
+  });
+  useLayoutEffect(() => {
+    latestRef.current = {
+      speedMode,
+      blueStrategy,
+      redStrategy,
+      simMode,
+      blueCaptain,
+      redCaptain,
+      blueAmplified: blueAmplifiedRemaining > 0,
+      redAmplified: redAmplifiedRemaining > 0,
+      updateRobotStep,
+      simulateAllianceWingBots,
+    };
+  });
+
   // Main simulation tick
   useEffect(() => {
     if (!isRunning) {
@@ -347,14 +377,19 @@ export function MatchSimulator({
       return;
     }
 
+    // The loop owns match time and phase while running; it starts from the current state.
+    let elapsed = elapsedSeconds;
+    let currentPhase = phase;
+
     const loop = (time: number) => {
+      const L = latestRef.current;
       const prevTime = lastFrameTimeRef.current ?? time;
       lastFrameTimeRef.current = time;
       // Clamp to 0–100 ms so a background tab or a slow frame cannot teleport robots.
       const realDeltaMs = Math.min(100, Math.max(0, time - prevTime));
 
-      const simDeltaSec = (realDeltaMs / 1000) * speedMode;
-      const nextElapsed = elapsedSeconds + simDeltaSec;
+      const simDeltaSec = (realDeltaMs / 1000) * L.speedMode;
+      const nextElapsed = elapsed + simDeltaSec;
 
       if (nextElapsed >= TOTAL_MATCH_SECONDS) {
         setElapsedSeconds(TOTAL_MATCH_SECONDS);
@@ -364,33 +399,22 @@ export function MatchSimulator({
         return;
       }
 
+      elapsed = nextElapsed;
       setElapsedSeconds(nextElapsed);
 
       // Match Phase Progression
-      if (nextElapsed <= 15) {
-        if (phase !== 'auto') {
-          setPhase('auto');
-          frcAudio.playCharge();
-        }
-      } else if (nextElapsed <= 130) {
-        if (phase !== 'teleop') {
-          setPhase('teleop');
-          frcAudio.playWhistle();
-        }
-      } else {
-        if (phase !== 'endgame') {
-          setPhase('endgame');
-          frcAudio.playBuzzer();
-        }
+      const nextPhase = nextElapsed <= 15 ? 'auto' : nextElapsed <= 130 ? 'teleop' : 'endgame';
+      if (nextPhase !== currentPhase) {
+        currentPhase = nextPhase;
+        setPhase(nextPhase);
+        if (nextPhase === 'auto') frcAudio.playCharge();
+        else if (nextPhase === 'teleop') frcAudio.playWhistle();
+        else frcAudio.playBuzzer();
       }
 
       // Update Amplification timers
-      if (blueAmplifiedRemaining > 0) {
-        setBlueAmplifiedRemaining((prev) => Math.max(0, prev - simDeltaSec));
-      }
-      if (redAmplifiedRemaining > 0) {
-        setRedAmplifiedRemaining((prev) => Math.max(0, prev - simDeltaSec));
-      }
+      setBlueAmplifiedRemaining((prev) => (prev > 0 ? Math.max(0, prev - simDeltaSec) : prev));
+      setRedAmplifiedRemaining((prev) => (prev > 0 ? Math.max(0, prev - simDeltaSec) : prev));
 
       // Update Flying Projectiles
       setFlyingProjectiles((prev) => {
@@ -425,29 +449,12 @@ export function MatchSimulator({
       });
 
       // Update Robot Physical Kinematics & Mechanics
-      updateRobotStep(
-        'blue',
-        blueCaptain,
-        blueStrategy,
-        redStrategy,
-        nextElapsed,
-        simDeltaSec,
-        blueAmplifiedRemaining > 0
-      );
-
-      updateRobotStep(
-        'red',
-        redCaptain,
-        redStrategy,
-        blueStrategy,
-        nextElapsed,
-        simDeltaSec,
-        redAmplifiedRemaining > 0
-      );
+      L.updateRobotStep('blue', L.blueCaptain, L.blueStrategy, L.redStrategy, nextElapsed, simDeltaSec, L.blueAmplified);
+      L.updateRobotStep('red', L.redCaptain, L.redStrategy, L.blueStrategy, nextElapsed, simDeltaSec, L.redAmplified);
 
       // Alliance Wing Bots Simulation (in 3v3 mode, simulates Pick 1 and Pick 2 cycle score events)
-      if (simMode === '3v3') {
-        simulateAllianceWingBots(simDeltaSec, nextElapsed);
+      if (L.simMode === '3v3') {
+        L.simulateAllianceWingBots(simDeltaSec, nextElapsed);
       }
 
       rafRef.current = requestAnimationFrame(loop);
@@ -458,17 +465,9 @@ export function MatchSimulator({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [
-    isRunning,
-    elapsedSeconds,
-    speedMode,
-    phase,
-    blueStrategy,
-    redStrategy,
-    blueAmplifiedRemaining,
-    redAmplifiedRemaining,
-    simMode,
-  ]);
+    // Deliberately only isRunning: the loop reads everything else through latestRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
 
   // Update a single robot's cycle, navigation, intake, and scoring
   const updateRobotStep = (
@@ -482,7 +481,7 @@ export function MatchSimulator({
   ) => {
     const isBlue = alliance === 'blue';
     const profile = getTeamBehaviorProfile(team);
-    const stats = getEnhancedTeamStats(team);
+    const stats = team.frcStats ?? getEnhancedTeamStats(team);
 
     // Defense factor: if opponent is playing lockdown defense, cycle time increases by 25%
     const defensePenalty = oppStrat === 'lockdown_defense' ? 1.25 : 1.0;
@@ -749,7 +748,7 @@ export function MatchSimulator({
               <h2 className="text-xl sm:text-2xl font-black font-montserrat uppercase tracking-tight text-text-main">
                 FRC Match Simulation Arena
               </h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-integra-yellow border border-border-main">
+              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-zinc-800 text-integra-yellow border border-border-main">
                 2024/2025 Rules Engine
               </span>
             </div>
@@ -802,7 +801,7 @@ export function MatchSimulator({
             title="Exit Simulator (Esc)"
           >
             <span>Dashboard</span>
-            <kbd className="text-[10px] font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
+            <kbd className="text-xs font-mono px-1 py-0.2 rounded bg-bg-dark border border-border-main text-text-muted">
               Esc
             </kbd>
           </button>
@@ -828,7 +827,7 @@ export function MatchSimulator({
 
             {/* Blue Captain */}
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold uppercase text-text-muted">Alliance Captain (Primary Robot)</span>
+              <span className="text-xs font-bold uppercase text-text-muted">Alliance Captain (Primary Robot)</span>
               <TeamSelectDropdown
                 selected={blueCaptain}
                 onSelect={(t) => setBlueCaptain(t)}
@@ -840,7 +839,7 @@ export function MatchSimulator({
             {simMode === '3v3' && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-text-muted">1st Pick (Shooter/Cycle)</span>
+                  <span className="text-xs font-bold uppercase text-text-muted">1st Pick (Shooter/Cycle)</span>
                   <TeamSelectDropdown
                     selected={bluePick1}
                     onSelect={(t) => setBluePick1(t)}
@@ -848,7 +847,7 @@ export function MatchSimulator({
                   />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-text-muted">2nd Pick (Defense/Support)</span>
+                  <span className="text-xs font-bold uppercase text-text-muted">2nd Pick (Defense/Support)</span>
                   <TeamSelectDropdown
                     selected={bluePick2}
                     onSelect={(t) => setBluePick2(t)}
@@ -860,7 +859,7 @@ export function MatchSimulator({
 
             {/* Blue Alliance Strategy */}
             <div className="pt-2 border-t border-border-main/60">
-              <span className="text-[10px] font-bold uppercase text-text-muted block mb-1.5">
+              <span className="text-xs font-bold uppercase text-text-muted block mb-1.5">
                 Alliance Strategy Playbook
               </span>
               <div className="grid grid-cols-3 gap-2 text-xs">
@@ -879,8 +878,8 @@ export function MatchSimulator({
                         : 'bg-bg-dark border-border-main text-text-muted hover:text-text-main'
                     }`}
                   >
-                    <span className="font-bold text-[11px] block">{s.label}</span>
-                    <span className="text-[9px] text-text-muted block">{s.desc}</span>
+                    <span className="font-bold text-sm block">{s.label}</span>
+                    <span className="text-xs text-text-muted block">{s.desc}</span>
                   </button>
                 ))}
               </div>
@@ -903,7 +902,7 @@ export function MatchSimulator({
 
             {/* Red Captain */}
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold uppercase text-text-muted">Alliance Captain (Primary Robot)</span>
+              <span className="text-xs font-bold uppercase text-text-muted">Alliance Captain (Primary Robot)</span>
               <TeamSelectDropdown
                 selected={redCaptain}
                 onSelect={(t) => setRedCaptain(t)}
@@ -915,7 +914,7 @@ export function MatchSimulator({
             {simMode === '3v3' && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-text-muted">1st Pick (Shooter/Cycle)</span>
+                  <span className="text-xs font-bold uppercase text-text-muted">1st Pick (Shooter/Cycle)</span>
                   <TeamSelectDropdown
                     selected={redPick1}
                     onSelect={(t) => setRedPick1(t)}
@@ -923,7 +922,7 @@ export function MatchSimulator({
                   />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-text-muted">2nd Pick (Defense/Support)</span>
+                  <span className="text-xs font-bold uppercase text-text-muted">2nd Pick (Defense/Support)</span>
                   <TeamSelectDropdown
                     selected={redPick2}
                     onSelect={(t) => setRedPick2(t)}
@@ -935,7 +934,7 @@ export function MatchSimulator({
 
             {/* Red Alliance Strategy */}
             <div className="pt-2 border-t border-border-main/60">
-              <span className="text-[10px] font-bold uppercase text-text-muted block mb-1.5">
+              <span className="text-xs font-bold uppercase text-text-muted block mb-1.5">
                 Alliance Strategy Playbook
               </span>
               <div className="grid grid-cols-3 gap-2 text-xs">
@@ -954,8 +953,8 @@ export function MatchSimulator({
                         : 'bg-bg-dark border-border-main text-text-muted hover:text-text-main'
                     }`}
                   >
-                    <span className="font-bold text-[11px] block">{s.label}</span>
-                    <span className="text-[9px] text-text-muted block">{s.desc}</span>
+                    <span className="font-bold text-sm block">{s.label}</span>
+                    <span className="text-xs text-text-muted block">{s.desc}</span>
                   </button>
                 ))}
               </div>
@@ -971,15 +970,15 @@ export function MatchSimulator({
             <span className="font-bold text-blue-400 font-mono">
               Blue Win: {predictions.blueWinProb}%
             </span>
-            <span className="text-text-muted text-[11px]">
+            <span className="text-text-muted text-sm">
               (Expected: ~{predictions.expectedBlueScore} pts)
             </span>
           </div>
-          <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">
+          <span className="text-xs uppercase font-bold text-text-muted tracking-wider">
             Statbotics Pre-Match Probability Model
           </span>
           <div className="flex items-center gap-2">
-            <span className="text-text-muted text-[11px]">
+            <span className="text-text-muted text-sm">
               (Expected: ~{predictions.expectedRedScore} pts)
             </span>
             <span className="font-bold text-red-400 font-mono">
@@ -1009,7 +1008,7 @@ export function MatchSimulator({
               <span className="text-xs sm:text-sm font-black text-blue-400 uppercase font-montserrat">
                 Blue Alliance
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono">
                 #{blueCaptain.number} {simMode === '3v3' ? `+ #${bluePick1.number} + #${bluePick2.number}` : ''}
               </span>
             </div>
@@ -1019,7 +1018,7 @@ export function MatchSimulator({
 
             {/* Amplification Banner */}
             {blueAmplifiedRemaining > 0 && (
-              <div className="mt-2 px-2 py-0.5 rounded bg-amber-500/30 border border-amber-400 text-amber-300 text-[10px] font-bold uppercase animate-pulse flex items-center gap-1">
+              <div className="mt-2 px-2 py-0.5 rounded bg-amber-500/30 border border-amber-400 text-amber-300 text-xs font-bold uppercase animate-pulse flex items-center gap-1">
                 <Zap className="w-3 h-3" />
                 <span>Amplified (5pts) • {blueAmplifiedRemaining.toFixed(1)}s</span>
               </div>
@@ -1029,7 +1028,7 @@ export function MatchSimulator({
           {/* Center Clock & Period */}
           <div className="flex flex-col items-center justify-center text-center">
             <div
-              className={`px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase mb-1.5 shadow-sm ${
+              className={`px-3 py-1 rounded-full text-xs font-black tracking-widest uppercase mb-1.5 shadow-sm ${
                 phase === 'auto'
                   ? 'bg-integra-yellow text-[#111111]'
                   : phase === 'teleop'
@@ -1055,7 +1054,7 @@ export function MatchSimulator({
               <Clock className="w-5 h-5 text-zinc-400 hidden sm:inline" />
               {formatTime(elapsedSeconds)}
             </div>
-            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-wider mt-0.5">
+            <div className="text-xs text-zinc-400 font-mono uppercase tracking-wider mt-0.5">
               Official 2:30 FRC Clock
             </div>
           </div>
@@ -1066,7 +1065,7 @@ export function MatchSimulator({
               <span className="text-xs sm:text-sm font-black text-red-400 uppercase font-montserrat">
                 Red Alliance
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-mono">
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-mono">
                 #{redCaptain.number} {simMode === '3v3' ? `+ #${redPick1.number} + #${redPick2.number}` : ''}
               </span>
             </div>
@@ -1076,7 +1075,7 @@ export function MatchSimulator({
 
             {/* Amplification Banner */}
             {redAmplifiedRemaining > 0 && (
-              <div className="mt-2 px-2 py-0.5 rounded bg-amber-500/30 border border-amber-400 text-amber-300 text-[10px] font-bold uppercase animate-pulse flex items-center gap-1">
+              <div className="mt-2 px-2 py-0.5 rounded bg-amber-500/30 border border-amber-400 text-amber-300 text-xs font-bold uppercase animate-pulse flex items-center gap-1">
                 <Zap className="w-3 h-3" />
                 <span>Amplified (5pts) • {redAmplifiedRemaining.toFixed(1)}s</span>
               </div>
@@ -1086,7 +1085,7 @@ export function MatchSimulator({
 
         {/* Scrubbable Match Progress Bar */}
         <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center gap-3">
-          <span className="text-[9px] font-mono text-zinc-400">0:00</span>
+          <span className="text-xs font-mono text-zinc-400">0:00</span>
           <div className="flex-1 relative h-2 bg-zinc-800 rounded-full overflow-hidden">
             <div className="absolute left-0 top-0 bottom-0 w-[10%] bg-amber-500/30 border-r border-amber-400/50" />
             <div className="absolute right-0 top-0 bottom-0 w-[13.3%] bg-red-500/30 border-l border-red-400/50" />
@@ -1095,7 +1094,7 @@ export function MatchSimulator({
               style={{ width: `${(elapsedSeconds / TOTAL_MATCH_SECONDS) * 100}%` }}
             />
           </div>
-          <span className="text-[9px] font-mono text-zinc-400">2:30</span>
+          <span className="text-xs font-mono text-zinc-400">2:30</span>
         </div>
       </div>
 
@@ -1146,7 +1145,7 @@ export function MatchSimulator({
 
         {/* Speed Multiplier Options */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-bold uppercase text-text-muted mr-1">Speed:</span>
+          <span className="text-xs font-bold uppercase text-text-muted mr-1">Speed:</span>
           {([1, 2.5, 5] as SimSpeedMode[]).map((spd) => (
             <button
               key={spd}
@@ -1172,7 +1171,7 @@ export function MatchSimulator({
               <Activity className="w-4 h-4 text-accent" />
               FRC Competition Field (Swerve & Vision Kinematics)
             </span>
-            <span className="font-mono text-[10px]">16.54m × 8.21m Regulation</span>
+            <span className="font-mono text-xs">16.54m × 8.21m Regulation</span>
           </div>
 
           {/* Arena Component */}
@@ -1196,7 +1195,7 @@ export function MatchSimulator({
               <Zap className="w-3.5 h-3.5 text-integra-yellow" />
               Official Match Feed
             </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
               {events.length} Events
             </span>
           </div>
@@ -1211,13 +1210,13 @@ export function MatchSimulator({
               events.map((ev) => (
                 <div
                   key={ev.id}
-                  className={`p-2 rounded-lg border text-[11px] leading-snug flex items-start gap-2 ${
+                  className={`p-2 rounded-lg border text-sm leading-snug flex items-start gap-2 ${
                     ev.alliance === 'blue'
                       ? 'bg-blue-950/40 border-blue-500/30 text-blue-200'
                       : 'bg-red-950/40 border-red-500/30 text-red-200'
                   }`}
                 >
-                  <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-black/60 text-zinc-400 shrink-0">
+                  <span className="font-mono text-xs px-1 py-0.5 rounded bg-black/60 text-zinc-400 shrink-0">
                     {ev.timeStr}
                   </span>
                   <span className="flex-1 font-medium">{ev.description}</span>
@@ -1387,7 +1386,7 @@ function TeamSelectDropdown({
       >
         <div className="flex items-center gap-2 truncate">
           <span
-            className={`font-black font-mono px-1.5 py-0.2 rounded text-[11px] ${
+            className={`font-black font-mono px-1.5 py-0.2 rounded text-sm ${
               alliance === 'blue' ? 'bg-blue-500/20 text-blue-300' : 'bg-red-500/20 text-red-300'
             }`}
           >
@@ -1395,7 +1394,7 @@ function TeamSelectDropdown({
           </span>
           <span className="font-semibold text-text-main truncate">{selected.name}</span>
         </div>
-        <span className="text-[10px] font-mono text-text-muted">{selected.score} pts</span>
+        <span className="text-xs font-mono text-text-muted">{selected.score} pts</span>
       </button>
 
       {isOpen && (
@@ -1424,7 +1423,7 @@ function TeamSelectDropdown({
                   <span className="font-mono font-bold text-accent">#{t.number}</span>
                   <span className="text-text-main truncate">{t.name}</span>
                 </div>
-                <span className="text-[10px] text-text-muted font-mono">{t.score} pts</span>
+                <span className="text-xs text-text-muted font-mono">{t.score} pts</span>
               </button>
             ))}
           </div>
